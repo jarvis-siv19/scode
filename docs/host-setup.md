@@ -84,7 +84,7 @@ Environment variables (all optional):
 
 ```sh
 npm ci
-npm test          # expect all 125 tests green
+npm test          # expect all 127 tests green
 jcode doctor      # Phase 0 gate — see docs/codex-local-testing.md
 jcode tools install   # wire the jcode-tools MCP server into the backends
 ```
