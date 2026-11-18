@@ -204,7 +204,7 @@ working rules below — while the ledger keeps the raw brief.
 
 ```sh
 npm run build    # TypeScript build
-npm test         # build + node:test suite (127 tests)
+npm test         # build + node:test suite (128 tests)
 npm run check    # typecheck only
 ```
 

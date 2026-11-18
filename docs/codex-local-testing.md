@@ -8,7 +8,7 @@ and logged in. This is that list, in order. Work from a fresh clone of
 
 ## 0. Baseline
 
-- `npm ci` then `npm test` — expect all 127 tests green.
+- `npm ci` then `npm test` — expect all 128 tests green.
   If any fail on macOS, that is a real bug: fix it on the branch, do not
   skip it.
 - `jcode status` — every installed backend should show a version string.
