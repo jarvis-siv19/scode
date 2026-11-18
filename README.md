@@ -1,10 +1,7 @@
-# scode
+# jcode
 
-[![npm](https://img.shields.io/npm/v/scode?logo=npm)](https://www.npmjs.com/package/scode)
-[![CI](https://github.com/sivab193/scode/actions/workflows/ci.yml/badge.svg)](https://github.com/sivab193/scode/actions/workflows/ci.yml)
+[![CI](https://github.com/sivab193/jcode/actions/workflows/ci.yml/badge.svg)](https://github.com/sivab193/jcode/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
-`scode` is the npm package and repository; it installs the `jcode` command.
 
 `jcode` is a local-first, quota-aware router for coding-agent CLIs. One command
 chooses an eligible backend for a whole job, launches the vendor's unmodified
@@ -27,7 +24,7 @@ committed.
 - 🧪 Phase 2 implementation present, acceptance pending — full TUI: manual quota entry (`m`), backend override (↑↓),
   jobs pane with live elapsed / tokens / output tail, help overlay (`?`)
 - 🧪 Phase 3 implementation present, acceptance pending — Caveman efficiency layer (opt-in per backend, telemetry off,
-  routing stays in scode; every run records `cavemanWrapped` in the ledger)
+  routing stays in jcode; every run records `cavemanWrapped` in the ledger)
 - 🧪 Phase 4 implementation present, acceptance pending — MCP tool suite v1: `jcode-tools` server (file-peek, pdf-read,
   latex-build, graph-query) + `jcode tools install` wiring into Codex/Claude/
   Kiro/Copilot/OpenCode configs; doctor load-tests the server for real
@@ -54,8 +51,8 @@ its smoke test passes. Never enable it on your own.
 Requires Node.js 20+ and at least one authenticated backend CLI.
 
 ```sh
-git clone https://github.com/sivab193/scode.git
-cd scode
+git clone https://github.com/sivab193/jcode.git
+cd jcode
 npm install
 npm run build
 npm link                       # install the `jcode` command locally
@@ -71,16 +68,15 @@ npm run build
 npm link
 ```
 
-The package name is `scode` because `jcode` is already taken on npm; the
-installed binary remains `jcode`. See [docs/publishing.md](docs/publishing.md)
-for the first publish and release workflow.
+The project is not currently published to npm because the unscoped `jcode`
+name is already owned by an unrelated package. See
+[docs/publishing.md](docs/publishing.md) before enabling a registry release.
 
 ## Links
 
-- [npm package](https://www.npmjs.com/package/scode)
-- [source code](https://github.com/sivab193/scode)
-- [issues and feature requests](https://github.com/sivab193/scode/issues)
-- [releases](https://github.com/sivab193/scode/releases)
+- [source code](https://github.com/sivab193/jcode)
+- [issues and feature requests](https://github.com/sivab193/jcode/issues)
+- [releases](https://github.com/sivab193/jcode/releases)
 
 ## Terminal UI
 

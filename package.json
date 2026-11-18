@@ -1,5 +1,5 @@
 {
-  "name": "scode",
+  "name": "jcode",
   "version": "0.1.0",
   "description": "Local-first quota-aware router for coding agent CLIs",
   "type": "module",
@@ -14,12 +14,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/sivab193/scode.git"
+    "url": "https://github.com/sivab193/jcode.git"
   },
   "bugs": {
-    "url": "https://github.com/sivab193/scode/issues"
+    "url": "https://github.com/sivab193/jcode/issues"
   },
-  "homepage": "https://github.com/sivab193/scode#readme",
+  "homepage": "https://github.com/sivab193/jcode#readme",
   "author": "Sivaganesh Balaganesh",
   "keywords": [
     "cli",
