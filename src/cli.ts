@@ -5,6 +5,7 @@ import { selectBackend } from './core/policy.js';
 import { backendSnapshots } from './core/quota.js';
 import { BACKEND_IDS, type BackendId } from './core/types.js';
 import { runDoctor } from './doctor.js';
+import { runLearn } from './core/learn.js';
 import { installForBackend, toolsStatus } from './mcp/install.js';
 
 export type Command =
@@ -80,8 +81,7 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
     return 0;
   }
   if (command.name === 'learn') {
-    console.log('jcode learn is reserved for Phase 5, after real ledger data exists.');
-    return 0;
+    return runLearn();
   }
   if (command.name === 'doctor') {
     const { exitCode } = await runDoctor({ quick: command.quick, full: command.full });

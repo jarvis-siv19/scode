@@ -21,7 +21,9 @@ The first host is a Windows laptop. Runtime state lives in `%USERPROFILE%\.jcode
 - ✅ Phase 4 — MCP tool suite v1: `jcode-tools` server (pdf-read, latex-build,
   file-peek) + `jcode tools install` wiring into Codex/Claude/Kiro/Copilot/
   OpenCode configs; doctor load-tests the server for real
-- ⏳ Phase 5 — learning loop (`jcode learn`)
+- ✅ Phase 5 — learning loop: `jcode learn` folds the ledger into
+  `~/.jcode/learn-report.md` (per-backend×class stats, Caveman on/off,
+  retries, prompt patterns, tool backlog, dead tools, proposed tweaks)
 - ⏳ Phase 6 — measured policy refinement
 
 Claude stays disabled until Claude Pro is confirmed live (~Nov 30, 2026) and

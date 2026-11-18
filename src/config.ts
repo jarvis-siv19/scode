@@ -42,6 +42,10 @@ export const statePaths = () => ({
   sessions: join(stateHome(), 'sessions.json'),
   /** Last `jcode doctor` result (Phase 0 gate record). */
   smoke: join(stateHome(), 'smoke.json'),
+  /** Last `jcode learn` report (Phase 5). */
+  learnReport: join(stateHome(), 'learn-report.md'),
+  /** MCP tool-call log, for the Phase 5 dead-tool check. */
+  toolCalls: join(stateHome(), 'tool-calls.jsonl'),
 });
 
 export async function ensureStateHome(): Promise<void> {
