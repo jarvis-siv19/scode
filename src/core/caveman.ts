@@ -2,9 +2,9 @@
  * Phase 3 — Caveman token-efficiency layer (handoff §7).
  *
  * The router spawns the caveman'd CLIs (`caveman codex`, ...) instead of the
- * bare ones, per backend, when enabled. Caveman Auto stays OFF (the router's
- * policy stage does that job locally) and telemetry stays OFF
- * (`DO_NOT_TRACK=1` is set on every wrapped spawn; also run
+ * bare ones, per backend, when enabled. Caveman's native routing is not
+ * configured (the router's policy stage does that job locally), and telemetry
+ * stays OFF (`DO_NOT_TRACK=1` is set on every wrapped spawn; also run
  * `caveman telemetry off` once after install).
  *
  * What jcode takes from Caveman:

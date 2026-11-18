@@ -24,7 +24,7 @@ committed.
 - 🧪 Phase 2 implementation present, acceptance pending — full TUI: manual quota entry (`m`), backend override (↑↓),
   jobs pane with live elapsed / tokens / output tail, help overlay (`?`)
 - 🧪 Phase 3 implementation present, acceptance pending — Caveman efficiency layer (opt-in per backend, telemetry off,
-  Auto off; every run records `cavemanWrapped` in the ledger for measurement)
+  routing stays in scode; every run records `cavemanWrapped` in the ledger)
 - 🧪 Phase 4 implementation present, acceptance pending — MCP tool suite v1: `jcode-tools` server (file-peek, pdf-read,
   latex-build, graph-query) + `jcode tools install` wiring into Codex/Claude/
   Kiro/Copilot/OpenCode configs; doctor load-tests the server for real

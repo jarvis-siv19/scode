@@ -45,14 +45,19 @@ test('caveman: skill-only mode never wraps the spawn', async () => {
 });
 
 test('caveman: missing binary warns and runs bare', async () => {
-  const { spec, wrapped } = await wrapSpawn(
-    { command: 'codex', args: ['exec'] },
-    'codex-a',
-    configWith({ enabled: true, mode: 'proxy' }),
-  );
-  // No caveman binary on this machine — must degrade, never fail the job.
-  assert.equal(wrapped, false);
-  assert.equal(spec.command, 'codex');
+  const oldPath = process.env.PATH;
+  process.env.PATH = '';
+  try {
+    const { spec, wrapped } = await wrapSpawn(
+      { command: 'codex', args: ['exec'] },
+      'codex-a',
+      configWith({ enabled: true, mode: 'proxy' }),
+    );
+    assert.equal(wrapped, false);
+    assert.equal(spec.command, 'codex');
+  } finally {
+    process.env.PATH = oldPath;
+  }
 });
 
 test('caveman: present binary wraps the command and sets DO_NOT_TRACK', async () => {

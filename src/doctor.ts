@@ -348,7 +348,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<{ results:
     id: 'caveman-present',
     label: 'caveman installed',
     status: caveman.present ? 'pass' : 'skip',
-    detail: caveman.present ? (caveman.version ?? 'installed') : 'not installed — Phase 3; install with `npx @caveman-ai/cli@latest`, telemetry off, Auto off',
+    detail: caveman.present ? (caveman.version ?? 'installed') : 'not installed — Phase 3; install with `npm install -g @caveman-ai/cli@latest`, then run `caveman setup --install` and `caveman telemetry off`',
   });
   if (options.full && caveman.present && present.get('codex-a')) {
     // Wrap test: does `caveman codex exec` keep the JSON stream intact?
@@ -358,8 +358,8 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<{ results:
       const result = await new Promise<{ exitCode: number | null; stdout: string }>((resolve) => {
         execFile(
           'caveman',
-          ['codex', 'exec', '--json', '--sandbox', 'workspace-write', '-C', dir, SMOKE_BRIEF],
-          { timeout: SMOKE_TIMEOUT_MS, windowsHide: true },
+          ['codex', 'exec', '--json', '--sandbox', 'workspace-write', '--skip-git-repo-check', '-C', dir, SMOKE_BRIEF],
+          { cwd: dir, timeout: SMOKE_TIMEOUT_MS, windowsHide: true },
           (error, stdout) => resolve({ exitCode: error ? 1 : 0, stdout: stdout.toString() }),
         );
       });
