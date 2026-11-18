@@ -70,7 +70,8 @@ is missing, `↑↓` pins a backend, `?` shows the keys.
 
 More shots: [help overlay](docs/shots/tui-help.png),
 [manual quota entry](docs/shots/tui-manual.png),
-[typed task with backend override](docs/shots/tui-override.png).
+[typed task with backend override](docs/shots/tui-override.png),
+[token usage dashboard](docs/shots/tui-tokens.png).
 
 ## Usage
 
@@ -84,6 +85,8 @@ jcode doctor                  # Phase 0 smoke tests for this machine
 jcode doctor --quick          # presence + probes only, no live dispatches
 jcode doctor --full           # also test the Caveman wrap on codex
 jcode learn                   # learning fold (Phase 5) -> ~/.jcode/learn-report.md
+jcode tokens                  # token usage dashboard (today + last 7 days)
+jcode graph init [path]       # build the repo code graph (Graphify, local only)
 jcode tools install           # wire the jcode-tools MCP server into backends
 jcode tools status            # show MCP wiring per backend
 jcode schedule add "review open PRs" --cron "0 9 * * 1-5"   # recurring job
@@ -100,6 +103,19 @@ Scheduled jobs fire through the same router at the time you set — either
 while the TUI is open (it ticks every minute) or via the OS scheduler
 (`jcode schedule install` prints the cron/schtasks wiring). Full guide:
 [docs/scheduling.md](docs/scheduling.md).
+
+Token usage comes from the ledger: the TUI's bottom bar always shows
+today's tokens and the last 7 days, `t` opens the full dashboard
+(per-backend bars, daily bars, Caveman on-vs-off), and `jcode tokens`
+prints the same dashboard headless. Runs that reported no usage data are
+counted separately — totals are what backends reported, never padded.
+
+Code graph (Graphify): `jcode graph init` once per repo builds a local,
+queryable map of the code (functions, classes, calls, imports) — no LLM
+calls, nothing leaves the machine. Dispatch builds it when it is missing or
+stale, and agents query it through the `graph-query` MCP tool instead of
+grepping for structure. Full guide: [docs/graphify.md](docs/graphify.md).
+Dart/Flutter is not parsed yet, so Flutter repos get no graph coverage.
 
 ## Backends
 

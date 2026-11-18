@@ -109,14 +109,15 @@ test('learn: dead tools need 30 days of history', () => {
   const youngAnalysis = analyzeLedger([], young, now);
   assert.deepEqual(youngAnalysis.deadTools, []);
   assert.equal(youngAnalysis.toolHistoryDays, 5);
-  // 40 days of history; file-peek and pdf-read called recently, latex-build never called.
+  // 40 days of history; file-peek and pdf-read called recently, latex-build
+  // and graph-query never called.
   const old = [
     { timestamp: '2026-10-09T12:00:00Z', tool: 'file-peek', ok: true },
     { timestamp: '2026-11-17T12:00:00Z', tool: 'file-peek', ok: true },
     { timestamp: '2026-11-17T12:00:00Z', tool: 'pdf-read', ok: true },
   ];
   const oldAnalysis = analyzeLedger([], old, now);
-  assert.deepEqual(oldAnalysis.deadTools, ['latex-build']);
+  assert.deepEqual(oldAnalysis.deadTools, ['latex-build', 'graph-query']);
 });
 
 test('learn: prompt patterns need 5 runs per side and 10pp delta', () => {

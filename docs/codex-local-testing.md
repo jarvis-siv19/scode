@@ -138,6 +138,38 @@ Do not enable before then. When Pro is live:
 - Open the TUI with a due schedule pending: it must fire as a `[sched]`
   job within a minute, and the Jobs pane must show upcoming schedules.
 
+## 11. Token dashboard
+
+- After the §2 runs, `jcode tokens` must show non-zero today totals that
+  match the ledger's `usage` fields (spot-check one run by hand).
+- The TUI bottom bar must show the same two numbers; `t` must open the
+  dashboard and any key must return to the task view with an empty task
+  bar (the `t` must not leak into the task text).
+- A backend that reports no usage must appear as "without usage data",
+  never as zero-token runs silently folded into the totals.
+
+## 12. Graphify code graph
+
+- Install Python 3.11+ and `uv tool install "graphifyy[mcp]"` (pin the
+  version), then `jcode doctor` must PASS the three Graphify checks.
+- `jcode graph init` on the jcode repo itself: graph builds in seconds,
+  `graphify-out/` appears in .gitignore, hooks install, and `jcode graph
+  status` reports current.
+- `jcode run` in a repo with no graph must build it first (look for the
+  `[jcode] code graph:` line) and the run-started ledger record must carry
+  `graphPresent` / `graphBuiltAtCommit` / `graphAction`.
+- From inside a job, the agent must be able to call the `graph-query` MCP
+  tool and get an answer about the repo (it resolves the graph from the
+  worktree to the main checkout). If the tool is missing, `jcode tools
+  install` was not run for that backend.
+- Commit a change, then run a dispatch: the graph must rebuild (stale
+  detection via `built_at_commit` vs HEAD).
+- Do NOT run `graphify extract` — the full pipeline needs an LLM backend.
+  jcode only ever calls `update` and the query commands.
+- Dart check (informational): run `graphify update` on the SplitLLM
+  flutter-app and confirm whether a newer graphify version parses Dart yet
+  — 0.9.112 did not.
+
 ## What to change vs what to report
 
 - **Fix on the branch:** test failures, adapter command changes, probe

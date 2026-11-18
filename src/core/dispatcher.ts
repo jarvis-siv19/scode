@@ -7,6 +7,7 @@ import { KiroAdapter } from '../adapters/kiro.js';
 import { OpenCodeAdapter } from '../adapters/opencode.js';
 import type { BackendAdapter } from '../adapters/types.js';
 import { loadConfig } from '../config.js';
+import { ensureGraph, type EnsureGraphResult } from './graphify.js';
 import { appendLedger } from './ledger.js';
 import { formatBrief, installPromptPack } from './promptPack.js';
 import { backendSnapshots, markCoolingDown } from './quota.js';
@@ -59,6 +60,17 @@ export async function dispatch(options: DispatchOptions): Promise<RunResult> {
   const config = await loadConfig();
   const taskId = options.taskId ?? randomUUID();
   const repoCwd = options.cwd ?? process.cwd();
+  // Pre-dispatch indexing: build the code graph when it is missing or stale
+  // (best-effort — a missing or failing graph never fails the job). Skipped
+  // on dry runs and on fallback retries (the first attempt already ensured it).
+  let graph: EnsureGraphResult | null = null;
+  const graphEnabled = config.graphify?.enabled !== false && (config.graphify?.autoBuild ?? true);
+  if (graphEnabled && !options.dryRun && !options.reuseWorktree) {
+    graph = await ensureGraph(repoCwd);
+    if (graph.action === 'built' || graph.action === 'failed') {
+      console.log(`[jcode] code graph: ${graph.detail}`);
+    }
+  }
   const worktree: Worktree = options.reuseWorktree ?? (options.dryRun
     ? { path: repoCwd, isWorktree: false }
     : await createWorktree(taskId, repoCwd));
@@ -93,6 +105,9 @@ export async function dispatch(options: DispatchOptions): Promise<RunResult> {
     classification: options.classification,
     selectionReason: options.selectionReason,
     ...(options.scheduleId ? { scheduleId: options.scheduleId } : {}),
+    // Graph state at dispatch time, so `jcode learn` can later compare
+    // graph-vs-no-graph token use. Absent when the graph check was skipped.
+    ...(graph ? { graphPresent: graph.status.present, graphBuiltAtCommit: graph.status.builtAtCommit, graphAction: graph.action } : {}),
   });
 
   let result: RunResult;

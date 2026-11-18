@@ -24,6 +24,16 @@ export interface JcodeConfig {
     mode?: 'proxy' | 'skill-only';
     perBackend?: Partial<Record<import('./core/types.js').BackendId, boolean>>;
   };
+  /**
+   * Graphify code graph. enabled: build/query the per-repo graph (default
+   * true; set JCODE_GRAPHIFY=false or enabled: false to turn it off).
+   * autoBuild: build the graph before dispatch when it is missing or stale
+   * (default true). No-op when the graphify binary is not installed.
+   */
+  graphify?: {
+    enabled?: boolean;
+    autoBuild?: boolean;
+  };
 }
 
 const defaults: JcodeConfig = {
@@ -85,6 +95,11 @@ export async function loadConfig(): Promise<JcodeConfig> {
     caveman: {
       ...fromDisk.caveman,
       enabled: process.env.JCODE_CAVEMAN === 'true' ? true : (fromDisk.caveman?.enabled ?? false),
+    },
+    graphify: {
+      ...fromDisk.graphify,
+      enabled: process.env.JCODE_GRAPHIFY === 'false' ? false : (fromDisk.graphify?.enabled ?? true),
+      autoBuild: fromDisk.graphify?.autoBuild ?? true,
     },
   };
 }

@@ -11,6 +11,9 @@ they get reviewed like any other change.
 
 - Quota and usage data is never faked. If a probe returns nothing, the
   backend reports "unknown", not a guess.
+- Structure questions go to the code graph first: use the `graph-query`
+  tool (or `graphify query`) before grepping for who calls what. Never read
+  graph.json directly; always query it with a budget.
 - The run ledger is append-only. Never edit or delete ledger lines.
 - A failed job's worktree is kept for inspection; a successful one is removed.
 

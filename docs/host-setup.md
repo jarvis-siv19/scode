@@ -10,6 +10,8 @@ spawns the official CLI, which keeps its own login.
 - Node.js 20+ (`node --version`)
 - git
 - A terminal that supports Ink (Windows Terminal is fine)
+- Python 3.11+ (for the Graphify code graph — optional; everything else
+  works without it, the graph features just skip silently)
 
 ## 2. Install the CLIs and log each one in
 
@@ -21,6 +23,14 @@ spawns the official CLI, which keeps its own login.
 | copilot | `npm i -g @github/copilot` (>= v1.0.28) | `copilot` first run |
 | opencode | opencode installer (v2) | none for free models |
 | claude | Claude Code installer | only after Claude Pro is live (see below) |
+
+Optional, for the code graph (see docs/graphify.md):
+
+```powershell
+winget install astral-sh.uv
+uv tool install "graphifyy[mcp]"     # pin a version in production, e.g. graphifyy==0.9.112
+graphify --version                   # verify it is on PATH
+```
 
 ## 3. Two Codex accounts, two homes
 

@@ -2,17 +2,20 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import { classifyAsync } from '../core/classifier.js';
 import { dispatch } from '../core/dispatcher.js';
+import { readLedgerTail } from '../core/ledger.js';
 import { selectBackend } from '../core/policy.js';
 import { backendSnapshots, setManualQuota } from '../core/quota.js';
 import { loadSchedules, runDueSchedules } from '../core/schedules.js';
 import { getPriors } from '../core/scoring.js';
+import { computeTokenStats, formatTokens, type TokenStats } from '../core/tokenStats.js';
 import { BACKEND_IDS, type BackendId, type BackendSnapshot } from '../core/types.js';
 import { BackendsPane } from './BackendsPane.js';
 import { JobsPane, type JobView, type ScheduleView } from './JobsPane.js';
 import { ManualEntry } from './ManualEntry.js';
 import { TaskBar } from './TaskBar.js';
+import { TokensDashboard } from './TokensDashboard.js';
 
-type Mode = 'task' | 'manual' | 'help';
+type Mode = 'task' | 'manual' | 'help' | 'tokens';
 
 /** Override cycle: auto, then each backend in order. */
 export const OVERRIDE_OPTIONS: Array<BackendId | undefined> = [undefined, ...BACKEND_IDS];
@@ -24,6 +27,7 @@ export function App() {
   const [backends, setBackends] = useState<BackendSnapshot[]>([]);
   const [jobs, setJobs] = useState<JobView[]>([]);
   const [schedules, setSchedules] = useState<ScheduleView[]>([]);
+  const [tokenStats, setTokenStats] = useState<TokenStats | null>(null);
   const [message, setMessage] = useState('Loading local backend state…');
   const [overrideIndex, setOverrideIndex] = useState(0);
   const [now, setNow] = useState(Date.now());
@@ -44,8 +48,11 @@ export function App() {
       id: item.id, brief: item.brief, backend: item.backend ?? 'auto',
       nextRunAt: item.nextRunAt, enabled: item.enabled,
     })));
+    // 2000 records ≈ 1000 runs — comfortably covers a heavy week.
+    const records = await readLedgerTail(2000);
+    setTokenStats(computeTokenStats(records, new Date()));
     const known = snapshots.filter((item) => item.quota.source !== 'placeholder').length;
-    setMessage(`Backends refreshed: ${known}/${snapshots.length} with quota data. r refreshes · m manual entry · ? help · q quits.`);
+    setMessage(`Backends refreshed: ${known}/${snapshots.length} with quota data. r refreshes · m manual entry · t tokens · ? help · q quits.`);
   };
 
   useEffect(() => { void refresh(true); }, []);
@@ -97,7 +104,7 @@ export function App() {
   }, []);
 
   /**
-   * Command keys (m/r/?/q) fire from the App's own input handler AND reach
+   * Command keys (m/r/t/?/q) fire from the App's own input handler AND reach
    * TextInput, which would type them into the task bar — so pressing `m` on
    * an empty bar opened the manual modal and left "m" in the task. Drop a
    * lone command character typed into an empty bar: those keys are reserved
@@ -106,11 +113,11 @@ export function App() {
    * other text is already present, and then this guard does not apply.
    */
   const handleTaskChange = (value: string) => {
-    setTask((prev) => (prev === '' && value.length === 1 && ['m', 'r', '?', 'q'].includes(value) ? prev : value));
+    setTask((prev) => (prev === '' && value.length === 1 && ['m', 'r', 't', '?', 'q'].includes(value) ? prev : value));
   };
 
   useInput((input, key) => {
-    if (mode === 'help') {
+    if (mode === 'help' || mode === 'tokens') {
       setMode('task');
       return;
     }
@@ -120,6 +127,7 @@ export function App() {
     if (input === 'q' && task.length === 0) exit();
     if (input === 'r' && task.length === 0) void refresh(true);
     if (input === 'm' && task.length === 0) setMode('manual');
+    if (input === 't' && task.length === 0) setMode('tokens');
     if (input === '?' && task.length === 0) setMode('help');
   }, { isActive: mode !== 'manual' });
 
@@ -190,13 +198,16 @@ export function App() {
   return (
     <Box flexDirection="column">
       <Text bold color="magenta">jcode</Text>
-      {mode === 'help' ? (
+      {mode === 'tokens' ? (
+        <TokensDashboard stats={tokenStats ?? computeTokenStats([], new Date())} />
+      ) : mode === 'help' ? (
         <Box borderStyle="round" flexDirection="column" paddingX={1}>
           <Text bold color="cyan">Keys</Text>
           <Text>Enter — dispatch the task (auto-routed, or the ↑↓ override)</Text>
           <Text>↑ ↓ — cycle backend override (auto → codex-a → codex-b → …)</Text>
           <Text>r — refresh quota probes</Text>
           <Text>m — manual quota entry (when the task bar is empty)</Text>
+          <Text>t — token usage dashboard (when the task bar is empty)</Text>
           <Text>? — this help</Text>
           <Text>q — quit (when the task bar is empty)</Text>
           <Text dimColor>Scheduled jobs (jcode schedule add) fire here every minute while the TUI is open.</Text>
@@ -213,11 +224,19 @@ export function App() {
           overrideLabel={override ? `backend: ${override}` : 'backend: auto'}
         />
       )}
-      <Box>
-        <BackendsPane backends={backends} />
-        <JobsPane jobs={jobs} schedules={schedules} now={now} />
-      </Box>
+      {mode !== 'tokens' && (
+        <Box>
+          <BackendsPane backends={backends} />
+          <JobsPane jobs={jobs} schedules={schedules} now={now} />
+        </Box>
+      )}
       <Text dimColor>{message}</Text>
+      {tokenStats && (
+        <Text dimColor>
+          Tokens today: {formatTokens(tokenStats.today.total)} · Last 7 days: {formatTokens(tokenStats.week.total)}
+          {tokenStats.week.costUsd > 0 ? ` · $${tokenStats.week.costUsd.toFixed(2)} this week` : ''} · t for the dashboard
+        </Text>
+      )}
     </Box>
   );
 }

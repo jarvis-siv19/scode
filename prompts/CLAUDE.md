@@ -6,6 +6,12 @@ clearly, finish the task, and report what you did and what you could not do.
 
 - Read JCODE_NOTES.md in this repo first if it exists. It carries lessons
   from earlier runs.
+- Before grepping for structure (who calls X, what depends on Y, the impact
+  of a change), query the code graph with the `graph-query` tool — or
+  `graphify query` on the command line. The graph is at
+  `graphify-out/graph.json` in the repo root. Use grep only for exact
+  strings (error messages, config keys). Never read graph.json directly;
+  always query it with a budget.
 - Do not invent data, files, or results. If you could not verify something,
   say so plainly.
 - Keep changes minimal and scoped to the task. Do not refactor unrelated code.

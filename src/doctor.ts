@@ -21,6 +21,7 @@ import { KiroAdapter } from './adapters/kiro.js';
 import { OpenCodeAdapter } from './adapters/opencode.js';
 import type { BackendAdapter } from './adapters/types.js';
 import { ensureStateHome, loadConfig, statePaths } from './config.js';
+import { graphifyInfo, graphifyMcpPresent, pythonInfo } from './core/graphify.js';
 import { probeAgy, probeClaude, probeCodex, probeKiro, cliInfo } from './core/probes.js';
 import type { BackendId } from './core/types.js';
 import { tempDir } from './core/worktree.js';
@@ -102,7 +103,8 @@ async function runSmokeDispatch(backend: BackendId, adapter: BackendAdapter): Pr
 
 /**
  * Load-test the jcode-tools MCP server: spawn it, speak JSON-RPC over stdio,
- * and expect tools/list to return pdf-read, latex-build, file-peek.
+ * and expect tools/list to return pdf-read, latex-build, file-peek,
+ * graph-query.
  */
 async function testMcpServer(): Promise<CheckResult> {
   const script = serverScriptPath();
@@ -141,7 +143,7 @@ async function testMcpServer(): Promise<CheckResult> {
           } else if (message.id === 2) {
             clearTimeout(timer);
             const names = (message.result?.tools ?? []).map((tool) => tool.name).sort();
-            const expected = ['file-peek', 'latex-build', 'pdf-read'];
+            const expected = ['file-peek', 'graph-query', 'latex-build', 'pdf-read'];
             const ok = JSON.stringify(names) === JSON.stringify(expected);
             finish({
               id: 'mcp-server',
@@ -378,6 +380,37 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<{ results:
       status: 'skip',
       detail: options.full ? 'needs caveman + codex installed' : 'run `jcode doctor --full` for the live wrap test',
     });
+  }
+
+  // ── Graphify (code graph — optional; SKIP, never FAIL, when absent) ───
+  const graphify = await graphifyInfo();
+  push({
+    id: 'graphify-present',
+    label: 'graphify CLI installed',
+    status: graphify.present ? 'pass' : 'skip',
+    detail: graphify.present
+      ? (graphify.version ?? 'installed')
+      : 'not installed — code-graph features skip silently (install: uv tool install "graphifyy[mcp]")',
+  });
+  if (graphify.present) {
+    const python = await pythonInfo();
+    const pyVersion = parseVersion(python.version ?? undefined);
+    push({
+      id: 'python-version',
+      label: 'Python >= 3.11 (graphify needs it)',
+      status: python.present && versionAtLeast(pyVersion, 3, 11, 0) ? 'pass' : 'fail',
+      detail: python.version ?? 'python not found on PATH',
+    });
+    const mcpExtra = await graphifyMcpPresent();
+    push({
+      id: 'graphify-mcp',
+      label: 'graphify-mcp binary ([mcp] extra)',
+      status: mcpExtra ? 'pass' : 'skip',
+      detail: mcpExtra ? 'installed' : 'not installed — not required; jcode queries the graph via the CLI, not the MCP server',
+    });
+  } else {
+    push({ id: 'python-version', label: 'Python >= 3.11 (graphify needs it)', status: 'skip', detail: 'graphify not installed' });
+    push({ id: 'graphify-mcp', label: 'graphify-mcp binary ([mcp] extra)', status: 'skip', detail: 'graphify not installed' });
   }
 
   // ── MCP server load test + per-backend wiring ─────────────────────────

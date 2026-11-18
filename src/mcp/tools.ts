@@ -2,10 +2,12 @@
  * Phase 4 — the jcode MCP tool suite (handoff §8).
  *
  * One server, `jcode-tools`, exposing the three tools the handoff ships first:
- * pdf-read, latex-build, file-peek. The rest of the suite is earned, not
- * assumed: the learning loop (Phase 5) turns repeated agent workarounds into
- * tool proposals in `~/.jcode/tool-backlog.md` — no tool gets built until the
- * ledger shows the waste.
+ * pdf-read, latex-build, file-peek — plus graph-query, added for the Graphify
+ * integration so agents query the repo's code graph instead of grepping for
+ * structure. The rest of the suite is earned, not assumed: the learning loop
+ * (Phase 5) turns repeated agent workarounds into tool proposals in
+ * `~/.jcode/tool-backlog.md` — no tool gets built until the ledger shows the
+ * waste.
  *
  * Why these three are tools, not Blocks (handoff §7): a Block is a script the
  * agent runs; a tool is an operation the router owns. pdf-read and latex-build
@@ -16,6 +18,7 @@ import { spawn } from 'node:child_process';
 import { access, readFile, stat } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { z } from 'zod';
+import { graphJsonPath, readGraphMeta, resolveMainCheckout, runGraphQuery, type GraphQueryKind } from '../core/graphify.js';
 import { cliInfo } from '../core/probes.js';
 
 export interface ToolResult {
@@ -23,13 +26,14 @@ export interface ToolResult {
   isError: boolean;
 }
 
-export const TOOL_NAMES = ['file-peek', 'pdf-read', 'latex-build'] as const;
+export const TOOL_NAMES = ['file-peek', 'pdf-read', 'latex-build', 'graph-query'] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
 
 export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   'file-peek': 'Read a slice of a text file by line number, with line numbers. Use this instead of reading a whole file when you only need part of it.',
   'pdf-read': 'Extract text from a PDF, optionally limited to a page range. Returns plain text; output is capped.',
   'latex-build': 'Compile a LaTeX document to PDF (latexmk when available, else two pdflatex passes). Returns the PDF path on success, or the log tail on failure.',
+  'graph-query': 'Query the repo code graph (Graphify) instead of grepping for structure: who calls X, what depends on Y, the impact of a change, the most-connected modules. Returns budgeted graph results with file+line. The graph lives at graphify-out/graph.json in the repo root; if it is missing, say so and suggest `jcode graph init`. Never read graph.json directly — always query it through this tool.',
 };
 
 /** Zod input shapes — the MCP SDK converts these to JSON Schema for tools/list. */
@@ -48,6 +52,13 @@ export const TOOL_INPUT_SHAPES = {
   'latex-build': {
     path: z.string().describe('Absolute or relative path to the .tex file.'),
     outDir: z.string().optional().describe('Output directory for the PDF. Default: the .tex file directory.'),
+  },
+  'graph-query': {
+    kind: z.enum(['query', 'explain', 'path', 'affected', 'god-nodes']).optional().describe('What to ask the graph. Default "query". query: free-form structure question. explain: what a symbol is and what connects to it. path: shortest path between two symbols (needs target). affected: what a change to a symbol would impact. god-nodes: the most-connected modules.'),
+    question: z.string().optional().describe('The question (query) or symbol name (explain/affected) or start symbol (path). Not needed for god-nodes.'),
+    target: z.string().optional().describe('End symbol, for kind "path" only.'),
+    budget: z.number().int().optional().describe('Token budget for the answer. Default 2000.'),
+    depth: z.number().int().optional().describe('Traversal depth, 1-6. Default 2.'),
   },
 };
 
@@ -148,11 +159,35 @@ export async function buildLatex(args: { path: string; outDir?: string }): Promi
   return { text: `latex-build: OK — ${pdfPath}`, isError: false };
 }
 
+const MAX_GRAPH_CHARS = 8000;
+
+/**
+ * Query the code graph for the repo the agent is working in. The server runs
+ * with the agent's cwd, which may be a jcode worktree — resolveMainCheckout
+ * walks to the main checkout, where the graph lives.
+ */
+export async function queryGraphTool(args: { kind?: GraphQueryKind; question?: string; target?: string; budget?: number; depth?: number }): Promise<ToolResult> {
+  const kind = args.kind ?? 'query';
+  const repoPath = await resolveMainCheckout(process.cwd());
+  const meta = await readGraphMeta(repoPath);
+  if (!meta) {
+    return error(`graph-query: no code graph at ${graphJsonPath(repoPath)}. Run \`jcode graph init\` in the repo root (or wait for the next jcode dispatch, which builds it automatically when graphify is installed).`);
+  }
+  const result = await runGraphQuery(repoPath, kind, { question: args.question, target: args.target, budget: args.budget, depth: args.depth });
+  if (!result.ok) return error(`graph-query: ${result.text}`);
+  const text = result.text;
+  if (text.length > MAX_GRAPH_CHARS) {
+    return { text: `${text.slice(0, MAX_GRAPH_CHARS)}\n[truncated: ${text.length - MAX_GRAPH_CHARS} more characters; narrow the question or lower the depth]`, isError: false };
+  }
+  return { text, isError: false };
+}
+
 export async function callTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
   switch (name) {
     case 'file-peek': return peekFile(args as { path: string; startLine?: number; endLine?: number });
     case 'pdf-read': return readPdf(args as { path: string; startPage?: number; endPage?: number; maxChars?: number });
     case 'latex-build': return buildLatex(args as { path: string; outDir?: string });
+    case 'graph-query': return queryGraphTool(args as { kind?: GraphQueryKind; question?: string; target?: string; budget?: number; depth?: number });
     default: return error(`Unknown tool: ${name}`);
   }
 }

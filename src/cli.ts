@@ -1,7 +1,10 @@
 import { resolve } from 'node:path';
 import { classifyAsync } from './core/classifier.js';
 import { dispatch } from './core/dispatcher.js';
+import { buildGraph, ensureGitignored, graphStatus, graphifyInfo, installGraphHooks } from './core/graphify.js';
+import { readLedgerTail } from './core/ledger.js';
 import { selectBackend } from './core/policy.js';
+import { computeTokenStats, renderTokenDashboard } from './core/tokenStats.js';
 import { backendSnapshots } from './core/quota.js';
 import {
   addSchedule,
@@ -25,7 +28,9 @@ export type Command =
   | { name: 'status' }
   | { name: 'doctor'; quick?: boolean; full?: boolean }
   | { name: 'learn' }
+  | { name: 'tokens' }
   | { name: 'tools'; action: 'install' | 'status' }
+  | { name: 'graph'; action: 'init' | 'status' | 'refresh'; path: string; force?: boolean }
   | {
       name: 'schedule';
       action: 'add' | 'list' | 'remove' | 'enable' | 'disable' | 'tick' | 'install';
@@ -50,6 +55,7 @@ export function parseArgs(argv: string[]): Command {
   if (name === '--help' || name === '-h' || name === 'help') return { name: 'help' };
   if (name === 'status') return { name: 'status' };
   if (name === 'learn') return { name: 'learn' };
+  if (name === 'tokens') return { name: 'tokens' };
   if (name === 'doctor') {
     return {
       name: 'doctor',
@@ -63,6 +69,7 @@ export function parseArgs(argv: string[]): Command {
     return { name: 'tools', action };
   }
   if (name === 'schedule') return parseScheduleArgs(rest);
+  if (name === 'graph') return parseGraphArgs(rest);
   if (name !== 'run') throw new Error(`Unknown command: ${name}`);
 
   let backend: BackendId | undefined;
@@ -87,6 +94,16 @@ export function parseArgs(argv: string[]): Command {
   const brief = briefParts.join(' ').trim();
   if (!brief) throw new Error('jcode run requires a task brief');
   return { name: 'run', brief, backend, cwd, dryRun };
+}
+
+function parseGraphArgs(rest: string[]): Extract<Command, { name: 'graph' }> {
+  const [action, ...args] = rest;
+  if (action !== 'init' && action !== 'status' && action !== 'refresh') {
+    throw new Error('Usage: jcode graph <init|status|refresh> [path] [--force]');
+  }
+  const force = args.includes('--force');
+  const pathArg = args.find((arg) => !arg.startsWith('--'));
+  return { name: 'graph', action, path: resolve(pathArg ?? process.cwd()), force };
 }
 
 function parseScheduleArgs(rest: string[]): Extract<Command, { name: 'schedule' }> {
@@ -158,7 +175,9 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
       '  jcode status                             per-backend headroom (runs probes)',
       '  jcode doctor [--quick] [--full]          Phase 0 machine smoke tests',
       '  jcode learn                              learning fold (Phase 5)',
+      '  jcode tokens                             token usage dashboard (today + last 7 days)',
       '  jcode tools <install|status>             wire the jcode-tools MCP server into backends',
+      '  jcode graph <init|status|refresh> [path] code graph for a repo (Graphify, local only)',
       '  jcode schedule add "<task>" --cron "0 9 * * 1-5"  recurring job (local time)',
       '  jcode schedule add "<task>" --at 2026-11-20T09:00  one-shot job',
       '  jcode schedule add "<task>" --in 2h       one-shot job, relative',
@@ -170,6 +189,13 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
   }
   if (command.name === 'learn') {
     return runLearn();
+  }
+  if (command.name === 'tokens') {
+    // 2000 records ≈ 1000 runs — comfortably covers a heavy week.
+    const records = await readLedgerTail(2000);
+    const stats = computeTokenStats(records, new Date());
+    for (const line of renderTokenDashboard(stats)) console.log(line);
+    return 0;
   }
   if (command.name === 'doctor') {
     const { exitCode } = await runDoctor({ quick: command.quick, full: command.full });
@@ -254,6 +280,53 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
       console.log(`Skipped mid-run: ${result.skippedRunning.join(', ')}.`);
     }
     return result.fired.some((item) => !item.success) ? 1 : 0;
+  }
+  if (command.name === 'graph') {
+    const repoPath = command.path;
+    if (command.action === 'status') {
+      const status = await graphStatus(repoPath);
+      if (!status.present) {
+        console.log(`No code graph at ${status.outDir}. Build one with: jcode graph init ${repoPath}`);
+        return 0;
+      }
+      console.log(`Graph: ${status.outDir}`);
+      console.log(`  nodes: ${status.nodeCount ?? '?'} · built at ${status.builtAtCommit?.slice(0, 7) ?? 'unknown'} · graphify ${status.graphifyVersion ?? 'unknown'}`);
+      console.log(`  HEAD: ${status.headCommit?.slice(0, 7) ?? 'not a git repo'}`);
+      console.log(`  state: ${status.stale ? 'STALE — run `jcode graph refresh`' : 'current'}`);
+      return 0;
+    }
+    const info = await graphifyInfo();
+    if (!info.present) {
+      console.log('graphify is not installed. Install it first: uv tool install "graphifyy[mcp]" (needs Python 3.11+).');
+      console.log('See docs/graphify.md for the Windows setup.');
+      return 1;
+    }
+    if (command.action === 'init') {
+      const existing = await graphStatus(repoPath);
+      if (existing.present && !existing.stale) {
+        console.log(`Graph already current (${existing.nodeCount ?? '?'} nodes, built at ${existing.builtAtCommit?.slice(0, 7)}).`);
+      } else {
+        const build = await buildGraph(repoPath, { force: command.force });
+        if (!build.ok) {
+          console.log(`Graph build failed: ${build.output}`);
+          return 1;
+        }
+        console.log(`Graph ${existing.present ? 'rebuilt' : 'built'}: ${build.nodeCount ?? '?'} nodes in ${(build.durationMs / 1000).toFixed(1)}s.`);
+      }
+      const ignored = await ensureGitignored(repoPath);
+      if (ignored === 'added') console.log('Added graphify-out/ to .gitignore.');
+      const hooks = await installGraphHooks(repoPath);
+      console.log(hooks.ok ? 'Git hooks installed — the graph refreshes on commit.' : `Hook install failed (the graph still works; refreshes happen on dispatch): ${hooks.output}`);
+      return 0;
+    }
+    // refresh
+    const build = await buildGraph(repoPath, { force: command.force });
+    if (!build.ok) {
+      console.log(`Graph refresh failed: ${build.output}`);
+      return 1;
+    }
+    console.log(`Graph refreshed: ${build.nodeCount ?? '?'} nodes in ${(build.durationMs / 1000).toFixed(1)}s.`);
+    return 0;
   }
   // status runs probes (cached 5 min); run reuses cached state for speed.
   const snapshots = await backendSnapshots({ refresh: command.name === 'status' });

@@ -53,7 +53,7 @@ function rpc(server: ChildProcessWithoutNullStreams): {
   };
 }
 
-test('mcp server: initialize + tools/list returns the three tools', async () => {
+test('mcp server: initialize + tools/list returns the four tools', async () => {
   const server = startServer();
   try {
     const { send, waitFor } = rpc(server);
@@ -63,7 +63,7 @@ test('mcp server: initialize + tools/list returns the three tools', async () => 
     send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
     const listed = await waitFor(2);
     const names = (listed.result?.tools ?? []).map((tool) => tool.name).sort();
-    assert.deepEqual(names, ['file-peek', 'latex-build', 'pdf-read']);
+    assert.deepEqual(names, ['file-peek', 'graph-query', 'latex-build', 'pdf-read']);
   } finally {
     server.kill();
   }
