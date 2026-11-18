@@ -86,11 +86,20 @@ jcode doctor --full           # also test the Caveman wrap on codex
 jcode learn                   # learning fold (Phase 5) -> ~/.jcode/learn-report.md
 jcode tools install           # wire the jcode-tools MCP server into backends
 jcode tools status            # show MCP wiring per backend
+jcode schedule add "review open PRs" --cron "0 9 * * 1-5"   # recurring job
+jcode schedule add "ping me" --in 2h                        # one-shot job
+jcode schedule list           # scheduled jobs and their next runs
+jcode schedule tick           # fire everything due right now
 ```
 
 `jcode run` defaults to the current directory and runs each job in its own git
 worktree (kept on failure for inspection, removed on success). It never
 extracts or reuses a vendor login token: adapters only spawn official CLIs.
+
+Scheduled jobs fire through the same router at the time you set — either
+while the TUI is open (it ticks every minute) or via the OS scheduler
+(`jcode schedule install` prints the cron/schtasks wiring). Full guide:
+[docs/scheduling.md](docs/scheduling.md).
 
 ## Backends
 

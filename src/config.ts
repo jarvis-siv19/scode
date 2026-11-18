@@ -52,6 +52,8 @@ export const statePaths = () => ({
   learnReport: join(stateHome(), 'learn-report.md'),
   /** MCP tool-call log, for the Phase 5 dead-tool check. */
   toolCalls: join(stateHome(), 'tool-calls.jsonl'),
+  /** Scheduled jobs (cron + one-shot). */
+  schedules: join(stateHome(), 'schedules.json'),
 });
 
 export async function ensureStateHome(): Promise<void> {

@@ -3,6 +3,16 @@ import { classifyAsync } from './core/classifier.js';
 import { dispatch } from './core/dispatcher.js';
 import { selectBackend } from './core/policy.js';
 import { backendSnapshots } from './core/quota.js';
+import {
+  addSchedule,
+  installHint,
+  loadSchedules,
+  parseDuration,
+  removeSchedule,
+  runDueSchedules,
+  setScheduleEnabled,
+  validateCron,
+} from './core/schedules.js';
 import { getPriors } from './core/scoring.js';
 import { BACKEND_IDS, type BackendId } from './core/types.js';
 import { runDoctor } from './doctor.js';
@@ -16,6 +26,18 @@ export type Command =
   | { name: 'doctor'; quick?: boolean; full?: boolean }
   | { name: 'learn' }
   | { name: 'tools'; action: 'install' | 'status' }
+  | {
+      name: 'schedule';
+      action: 'add' | 'list' | 'remove' | 'enable' | 'disable' | 'tick' | 'install';
+      brief?: string;
+      cron?: string;
+      at?: string;
+      inMs?: number;
+      backend?: BackendId;
+      cwd?: string;
+      id?: string;
+      dryRun?: boolean;
+    }
   | { name: 'help' };
 
 function isBackend(value: string): value is BackendId {
@@ -40,6 +62,7 @@ export function parseArgs(argv: string[]): Command {
     if (action !== 'install' && action !== 'status') throw new Error('Usage: jcode tools <install|status>');
     return { name: 'tools', action };
   }
+  if (name === 'schedule') return parseScheduleArgs(rest);
   if (name !== 'run') throw new Error(`Unknown command: ${name}`);
 
   let backend: BackendId | undefined;
@@ -66,6 +89,66 @@ export function parseArgs(argv: string[]): Command {
   return { name: 'run', brief, backend, cwd, dryRun };
 }
 
+function parseScheduleArgs(rest: string[]): Extract<Command, { name: 'schedule' }> {
+  const [action, ...args] = rest;
+  if (action === 'list') return { name: 'schedule', action: 'list' };
+  if (action === 'install') return { name: 'schedule', action: 'install' };
+  if (action === 'tick') {
+    return { name: 'schedule', action: 'tick', dryRun: args.includes('--dry-run') };
+  }
+  if (action === 'remove' || action === 'enable' || action === 'disable') {
+    if (!args[0]) throw new Error(`Usage: jcode schedule ${action} <id>`);
+    return { name: 'schedule', action, id: args[0] };
+  }
+  if (action !== 'add') {
+    throw new Error('Usage: jcode schedule <add|list|remove|enable|disable|tick|install>');
+  }
+  let backend: BackendId | undefined;
+  let cwd: string | undefined;
+  let cron: string | undefined;
+  let at: string | undefined;
+  let inMs: number | undefined;
+  const briefParts: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] === '--backend') {
+      const value = args[++index];
+      if (!value || !isBackend(value)) throw new Error(`Invalid backend. Choose: ${BACKEND_IDS.join(', ')}`);
+      backend = value;
+    } else if (args[index] === '--cwd') {
+      const value = args[++index];
+      if (!value) throw new Error('--cwd requires a path');
+      cwd = resolve(value);
+    } else if (args[index] === '--cron') {
+      const value = args[++index];
+      if (!value) throw new Error('--cron requires a 5-field expression, e.g. "0 9 * * 1-5"');
+      try {
+        validateCron(value);
+      } catch (error) {
+        throw new Error(`Invalid cron expression "${value}": ${error instanceof Error ? error.message : String(error)}`);
+      }
+      cron = value;
+    } else if (args[index] === '--at') {
+      const value = args[++index];
+      if (!value || Number.isNaN(new Date(value).getTime())) {
+        throw new Error('--at requires a valid date, e.g. "2026-11-20T09:00" (local time)');
+      }
+      at = new Date(value).toISOString();
+    } else if (args[index] === '--in') {
+      const value = args[++index];
+      const parsed = value ? parseDuration(value) : null;
+      if (parsed === null) throw new Error('--in requires a duration like "30m", "2h", or "1d"');
+      inMs = parsed;
+    } else {
+      briefParts.push(args[index]);
+    }
+  }
+  const brief = briefParts.join(' ').trim();
+  if (!brief) throw new Error('jcode schedule add requires a task brief');
+  const kinds = [cron !== undefined, at !== undefined, inMs !== undefined].filter(Boolean).length;
+  if (kinds !== 1) throw new Error('jcode schedule add needs exactly one of --cron, --at, or --in');
+  return { name: 'schedule', action: 'add', brief, cron, at, inMs, backend, cwd };
+}
+
 export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): Promise<number> {
   if (command.name === 'help') {
     console.log([
@@ -76,6 +159,10 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
       '  jcode doctor [--quick] [--full]          Phase 0 machine smoke tests',
       '  jcode learn                              learning fold (Phase 5)',
       '  jcode tools <install|status>             wire the jcode-tools MCP server into backends',
+      '  jcode schedule add "<task>" --cron "0 9 * * 1-5"  recurring job (local time)',
+      '  jcode schedule add "<task>" --at 2026-11-20T09:00  one-shot job',
+      '  jcode schedule add "<task>" --in 2h       one-shot job, relative',
+      '  jcode schedule <list|remove|enable|disable|tick|install>',
       '',
       `Backends: ${BACKEND_IDS.join(', ')}`,
     ].join('\n'));
@@ -106,6 +193,67 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
       console.log(`${backend.padEnd(10)} ${outcome.status.padEnd(16)} ${outcome.detail}`);
     }
     return errors > 0 ? 1 : 0;
+  }
+  if (command.name === 'schedule') {
+    if (command.action === 'install') {
+      console.log(installHint());
+      return 0;
+    }
+    if (command.action === 'list') {
+      const schedules = await loadSchedules();
+      if (schedules.length === 0) {
+        console.log('No schedules. Add one with: jcode schedule add "<task>" --cron "0 9 * * 1-5"');
+        return 0;
+      }
+      for (const item of schedules) {
+        const state = item.enabled ? 'on ' : 'off';
+        const when = item.nextRunAt ?? '—';
+        const via = item.backend ?? 'auto';
+        console.log(`${item.id}  ${state}  ${when}  ${item.kind.padEnd(4)} ${via.padEnd(9)} ${item.brief.slice(0, 60)}`);
+      }
+      return 0;
+    }
+    if (command.action === 'add') {
+      const created = await addSchedule({
+        brief: command.brief as string,
+        cron: command.cron,
+        at: command.at,
+        inMs: command.inMs,
+        backend: command.backend,
+        cwd: command.cwd,
+      });
+      console.log(`Scheduled ${created.id} — next run ${created.nextRunAt} (${created.kind}, ${created.backend ?? 'auto'}).`);
+      console.log('It fires when `jcode schedule tick` runs — see `jcode schedule install`, or keep the TUI open.');
+      return 0;
+    }
+    if (command.action === 'remove') {
+      const removed = await removeSchedule(command.id as string);
+      console.log(`Removed ${removed.id} ("${removed.brief.slice(0, 60)}").`);
+      return 0;
+    }
+    if (command.action === 'enable' || command.action === 'disable') {
+      const updated = await setScheduleEnabled(command.id as string, command.action === 'enable');
+      console.log(`${updated.id} is now ${updated.enabled ? 'enabled' : 'disabled'}.`);
+      return 0;
+    }
+    // tick
+    const result = await runDueSchedules({
+      dryRun: command.dryRun,
+      onStart: ({ schedule }) => console.log(`[jcode] firing ${schedule.id}: ${schedule.brief.slice(0, 60)}`),
+      onFinish: ({ schedule }, runResult) => {
+        console.log(`[jcode] ${schedule.id} ${runResult.success ? 'succeeded' : `failed (${runResult.errorClass ?? 'unknown'})`} on ${runResult.backend}`);
+      },
+    });
+    if (result.dryRun) {
+      if (result.fired.length === 0) console.log('Nothing due right now.');
+      for (const item of result.fired) console.log(`Would fire ${item.scheduleId}.`);
+      return 0;
+    }
+    if (result.fired.length === 0) console.log('Nothing due right now.');
+    if (result.skippedRunning.length > 0) {
+      console.log(`Skipped mid-run: ${result.skippedRunning.join(', ')}.`);
+    }
+    return result.fired.some((item) => !item.success) ? 1 : 0;
   }
   // status runs probes (cached 5 min); run reuses cached state for speed.
   const snapshots = await backendSnapshots({ refresh: command.name === 'status' });

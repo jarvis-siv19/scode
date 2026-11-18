@@ -39,6 +39,8 @@ export interface DispatchOptions {
   reuseWorktree?: Worktree;
   /** Internal: keep one task id across a fallback retry. */
   taskId?: string;
+  /** Set by the scheduler so ledger records tie back to their schedule. */
+  scheduleId?: string;
 }
 
 /**
@@ -90,6 +92,7 @@ export async function dispatch(options: DispatchOptions): Promise<RunResult> {
     sessionResumed: !!sessionId,
     classification: options.classification,
     selectionReason: options.selectionReason,
+    ...(options.scheduleId ? { scheduleId: options.scheduleId } : {}),
   });
 
   let result: RunResult;
@@ -105,6 +108,7 @@ export async function dispatch(options: DispatchOptions): Promise<RunResult> {
       timestamp: new Date().toISOString(),
       backend: request.backend,
       error: error instanceof Error ? error.message : String(error),
+      ...(options.scheduleId ? { scheduleId: options.scheduleId } : {}),
     });
     if (worktree.isWorktree) await removeWorktree(worktree, repoCwd);
     throw error;
@@ -112,7 +116,11 @@ export async function dispatch(options: DispatchOptions): Promise<RunResult> {
 
   result = { ...result, worktree: worktree.path };
   if (result.sessionId) await saveSessionId(taskId, request.backend, result.sessionId);
-  await appendLedger({ event: 'run-finished', ...result });
+  await appendLedger({
+    event: 'run-finished',
+    ...result,
+    ...(options.scheduleId ? { scheduleId: options.scheduleId } : {}),
+  });
 
   // Success: clean up the worktree. Failure: keep it for inspection/resume.
   if (result.success) {

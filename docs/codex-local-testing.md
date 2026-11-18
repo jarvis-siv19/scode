@@ -126,6 +126,18 @@ Do not enable before then. When Pro is live:
 - If a proposal looks wrong, say which numbers disagree — do not tune the
   thresholds to make the report look nicer.
 
+## 10. Scheduled jobs
+
+- `jcode schedule add "say hello" --in 1m`, then `jcode schedule tick
+  --dry-run` — must say "Would fire" after the minute passes.
+- `jcode schedule tick` — must dispatch through the real router (check the
+  ledger: the run-started record carries a `scheduleId`), and the one-shot
+  must show disabled in `jcode schedule list` afterwards.
+- `jcode schedule install` — must print a `schtasks` command on Windows.
+  Do NOT create the scheduled task without asking — it is a system change.
+- Open the TUI with a due schedule pending: it must fire as a `[sched]`
+  job within a minute, and the Jobs pane must show upcoming schedules.
+
 ## What to change vs what to report
 
 - **Fix on the branch:** test failures, adapter command changes, probe
