@@ -93,7 +93,17 @@ function runCapture(
 export interface CodexRateLimitWindow {
   usedPercent: number;
   windowMinutes?: number;
-  resetsAt?: string | null;
+  windowDurationMins?: number;
+  resetsAt?: string | number | null;
+}
+
+function normalizeResetTime(value: unknown): string | null {
+  if (typeof value === 'string') return value;
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  // App-server currently emits Unix seconds; accept milliseconds defensively.
+  const milliseconds = value < 10_000_000_000 ? value * 1000 : value;
+  const date = new Date(milliseconds);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 export function parseCodexRateLimits(payload: unknown): QuotaWindow | null {
@@ -115,15 +125,12 @@ export function parseCodexRateLimits(payload: unknown): QuotaWindow | null {
     if (used === null || Number.isNaN(used)) continue;
     const windowMinutes =
       typeof w.windowMinutes === 'number' ? w.windowMinutes
+        : typeof w.windowDurationMins === 'number' ? w.windowDurationMins
         : name.includes('5h') || name.includes('five') ? 300
           : name.includes('week') ? 10080
             : name.includes('month') ? 43200
               : 0;
-    const resetsAt =
-      typeof w.resetsAt === 'string' ? w.resetsAt
-        : typeof w.resets_at === 'string' ? w.resets_at
-          : typeof w.resetAt === 'string' ? w.resetAt
-            : null;
+    const resetsAt = normalizeResetTime(w.resetsAt ?? w.resets_at ?? w.resetAt);
     windows.push({ name, remainingFraction: Math.round(Math.max(0, 1 - used / 100) * 10_000) / 10_000, resetsAt, windowMinutes });
   }
   if (windows.length === 0) return null;
@@ -132,23 +139,69 @@ export function parseCodexRateLimits(payload: unknown): QuotaWindow | null {
   return windowFrom(tightest.remainingFraction, tightest.resetsAt, tightest.windowMinutes, { windows });
 }
 
+function readCodexRateLimits(env: NodeJS.ProcessEnv): Promise<unknown | null> {
+  return new Promise((resolve) => {
+    const child = spawn('codex', ['app-server', '--listen', 'stdio://'], {
+      env,
+      shell: false,
+      windowsHide: true,
+    });
+    let buffer = '';
+    let settled = false;
+    const finish = (value: unknown | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.stdin.end();
+      child.kill();
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(null), PROBE_TIMEOUT_MS);
+    timer.unref();
+
+    child.on('error', () => finish(null));
+    child.on('close', () => finish(null));
+    child.stdout.on('data', (chunk: Buffer) => {
+      buffer += chunk.toString();
+      while (buffer.includes('\n')) {
+        const boundary = buffer.indexOf('\n');
+        const line = buffer.slice(0, boundary).trim();
+        buffer = buffer.slice(boundary + 1);
+        if (!line.startsWith('{')) continue;
+        try {
+          const message = JSON.parse(line) as { id?: number; result?: unknown };
+          if (message.id === 1) {
+            child.stdin.write(`${JSON.stringify({ method: 'initialized' })}\n`);
+            child.stdin.write(`${JSON.stringify({
+              id: 2,
+              method: 'account/rateLimits/read',
+              params: { excludeResetCreditDetails: true },
+            })}\n`);
+          } else if (message.id === 2) {
+            finish(message);
+          }
+        } catch {
+          // Non-protocol output is ignored; keep scanning until timeout.
+        }
+      }
+    });
+
+    child.stdin.write(`${JSON.stringify({
+      id: 1,
+      method: 'initialize',
+      params: {
+        clientInfo: { name: 'jcode', version: '0.1.0' },
+        capabilities: { experimentalApi: true },
+      },
+    })}\n`);
+  });
+}
+
 export async function probeCodex(config: JcodeConfig, account: 'a' | 'b'): Promise<QuotaWindow | null> {
   const home = account === 'a' ? config.codexHomes.a : config.codexHomes.b;
   const env: NodeJS.ProcessEnv = { ...process.env };
   if (home) env.CODEX_HOME = home;
-  const request = `${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'account/rateLimits/read', params: {} })}\n`;
-  const { stdout } = await runCapture('codex', ['app-server'], env, PROBE_TIMEOUT_MS, request);
-  for (const line of stdout.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith('{')) continue;
-    try {
-      const parsed = parseCodexRateLimits(JSON.parse(trimmed) as unknown);
-      if (parsed) return parsed;
-    } catch {
-      // Not a JSON response line — keep scanning.
-    }
-  }
-  return null;
+  return parseCodexRateLimits(await readCodexRateLimits(env));
 }
 
 // ─── Kiro: `kiro-cli chat --no-interactive "/usage"` ─────────────────────────
@@ -290,7 +343,16 @@ export async function probeBackend(id: BackendId, config: JcodeConfig): Promise<
 export function cliInfo(binary: string, versionArgs: string[] = ['--version']): Promise<{ present: boolean; version?: string }> {
   return new Promise((resolve) => {
     execFile(binary, versionArgs, { timeout: 10_000, windowsHide: true }, (error, stdout, stderr) => {
-      if (error && (error as NodeJS.ErrnoException).code === 'ENOENT') return resolve({ present: false });
+      if (error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+        if (process.platform !== 'win32') return resolve({ present: false });
+        // npm-installed CLIs commonly exist only as .cmd shims. execFile may
+        // report ENOENT for those even though CreateProcess/where can find the
+        // command. Presence is enough here; adapters validate execution.
+        execFile('where.exe', [binary], { timeout: 5_000, windowsHide: true }, (whereError, whereStdout) => {
+          resolve({ present: !whereError && whereStdout.trim().length > 0 });
+        });
+        return;
+      }
       const text = `${stdout}${stderr}`.trim().split('\n')[0]?.trim() ?? '';
       resolve({ present: true, version: text || undefined });
     });

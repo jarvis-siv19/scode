@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createWorktree, gitRoot, removeWorktree } from '../dist/core/worktree.js';
@@ -23,10 +23,10 @@ test('worktree: creates an isolated worktree and removes it', async () => {
     await git(['add', '.'], repo);
     await git(['commit', '-m', 'init'], repo);
 
-    assert.equal(await gitRoot(repo), repo);
+    assert.equal(await realpath((await gitRoot(repo)) as string), await realpath(repo));
     const worktree = await createWorktree('test-task-1', repo);
     assert.equal(worktree.isWorktree, true);
-    assert.equal(await readFile(join(worktree.path, 'a.txt'), 'utf8'), 'hello\n');
+    assert.equal((await readFile(join(worktree.path, 'a.txt'), 'utf8')).replace(/\r\n/g, '\n'), 'hello\n');
     await removeWorktree(worktree, repo);
     await assert.rejects(readFile(join(worktree.path, 'a.txt'), 'utf8'));
   } finally {

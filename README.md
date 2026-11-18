@@ -1,36 +1,37 @@
-# scode
+# jcode
 
-[![npm](https://img.shields.io/npm/v/scode?logo=npm)](https://www.npmjs.com/package/scode)
-[![CI](https://github.com/sivab193/scode/actions/workflows/ci.yml/badge.svg)](https://github.com/sivab193/scode/actions/workflows/ci.yml)
+[![CI](https://github.com/sivab193/jcode/actions/workflows/ci.yml/badge.svg)](https://github.com/sivab193/jcode/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
-`scode` is the npm package and repository; it installs the `jcode` command.
 
 `jcode` is a local-first, quota-aware router for coding-agent CLIs. One command
 chooses an eligible backend for a whole job, launches the vendor's unmodified
 binary, streams its output, and records the routing decision in a local ledger.
 
-The first host is macOS. Runtime state lives in `~/.jcode` (or `JCODE_HOME`)
-and is never committed.
+The first live host is a Windows laptop; macOS host verification is also in
+progress. Runtime state lives in `~/.jcode` (or `JCODE_HOME`) and is never
+committed.
 
 ## Status
 
 - ✅ Base scaffold + real Codex dispatch (Codex, Nov 18, 2026)
-- ✅ Phase 0 — `jcode doctor` smoke-test harness (run it on the host to go green)
-- ✅ Phase 1 — router core: real kiro/agy/copilot/opencode adapters, quota
+- ⚠️ Phase 0 — smoke harness implemented; Windows verification is partially
+  complete and remains blocked on missing CLIs, Kiro quota, common MCP loading,
+  Caveman measurement, a second Codex account, and the deferred Claude check
+- 🧪 Phase 1 implementation present, acceptance pending Phase 0 — router core:
+  real kiro/agy/copilot/opencode adapters, quota
   probes, rule-based classifier, quota-floor + soonest-expiring policy,
   worktree-per-job dispatch with one fallback, JSONL ledger
-- ✅ Phase 2 — full TUI: manual quota entry (`m`), backend override (↑↓),
+- 🧪 Phase 2 implementation present, acceptance pending — full TUI: manual quota entry (`m`), backend override (↑↓),
   jobs pane with live elapsed / tokens / output tail, help overlay (`?`)
-- ✅ Phase 3 — Caveman efficiency layer (opt-in per backend, telemetry off,
+- 🧪 Phase 3 implementation present, acceptance pending — Caveman efficiency layer (opt-in per backend, telemetry off,
   Auto off; every run records `cavemanWrapped` in the ledger for measurement)
-- ✅ Phase 4 — MCP tool suite v1: `jcode-tools` server (file-peek, pdf-read,
+- 🧪 Phase 4 implementation present, acceptance pending — MCP tool suite v1: `jcode-tools` server (file-peek, pdf-read,
   latex-build, graph-query) + `jcode tools install` wiring into Codex/Claude/
   Kiro/Copilot/OpenCode configs; doctor load-tests the server for real
-- ✅ Phase 5 — learning loop: `jcode learn` folds the ledger into
+- 🧪 Phase 5 implementation present, acceptance pending — learning loop: `jcode learn` folds the ledger into
   `~/.jcode/learn-report.md` (per-backend×class stats, Caveman on/off,
   retries, prompt patterns, tool backlog, dead tools, proposed tweaks)
-- ✅ Phase 6 — measured policy refinement: expected-cost scoring with
+- 🧪 Phase 6 implementation present, acceptance pending — measured policy refinement: expected-cost scoring with
   Beta-smoothed success priors (20-run floor per pair, reset time priced
   in), rules-based effort selection, and the Laya classification seam
   (`JCODE_LAYA_URL`; rules take over when Laya is not serving)
@@ -50,8 +51,12 @@ its smoke test passes. Never enable it on your own.
 Requires Node.js 20+ and at least one authenticated backend CLI.
 
 ```sh
-npx -y scode doctor --quick   # try it without installing
-npm install -g scode          # install the `jcode` command
+git clone https://github.com/sivab193/jcode.git
+cd jcode
+npm install
+npm run build
+npm link                       # install the `jcode` command locally
+jcode doctor --quick
 jcode                          # open the terminal UI
 ```
 
@@ -63,16 +68,15 @@ npm run build
 npm link
 ```
 
-Publishing notes (name, first publish, releases) live in
-[docs/publishing.md](docs/publishing.md). `jcode` is taken on npm, so the
-package is `scode`; the binary is still `jcode`.
+The project is not currently published to npm because the unscoped `jcode`
+name is already owned by an unrelated package. See
+[docs/publishing.md](docs/publishing.md) before enabling a registry release.
 
 ## Links
 
-- [npm package](https://www.npmjs.com/package/scode)
-- [source code](https://github.com/sivab193/scode)
-- [issues and feature requests](https://github.com/sivab193/scode/issues)
-- [releases](https://github.com/sivab193/scode/releases)
+- [source code](https://github.com/sivab193/jcode)
+- [issues and feature requests](https://github.com/sivab193/jcode/issues)
+- [releases](https://github.com/sivab193/jcode/releases)
 
 ## Terminal UI
 

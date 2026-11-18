@@ -4,7 +4,7 @@ Everything buildable in a clean environment is built: all six phases, the
 lessons store, the real claude adapter (disabled), the prompt pack, CI, and
 these docs. What is left can only be verified where the CLIs are installed
 and logged in. This is that list, in order. Work from a fresh clone of
-`sivab193/scode` after PR #1 merges, on a branch named with the day's date.
+`sivab193/jcode` after PR #1 merges, on a branch named with the day's date.
 
 ## 0. Baseline
 

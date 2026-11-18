@@ -22,8 +22,8 @@ Phase 1 must not start until the required smoke checks pass.
 | Backend | Observed version | Result | Evidence / blocker |
 | --- | --- | --- | --- |
 | Codex | `codex-cli 0.163.0` | PASS with runtime caveat | `codex exec --json` returned a real streamed answer through jcode. A file-writing task failed inside the nested Windows app sandbox even though the no-tool task passed; investigate before claiming tool-capable nested runs. |
-| Kiro | binary does not report a version through the checked interface | BLOCKED: quota | `kiro-cli chat --no-interactive --trust-all-tools --output-format stream-json` emitted valid ACP events, then returned `UsageLimitReachedError` for the monthly limit. `/usage` returned the same limit error. |
-| Antigravity (`agy`) | `1.4.8` | PASS | Exact `agy -p "..." --output-format json` returned the requested text, conversation id, duration, and token usage. A separate plan-mode run exited zero with an empty response after a denied command; the adapter must treat empty/denied results as capability failure. |
+| Kiro | `3.1.0` | BLOCKED: quota | `kiro-cli chat --no-interactive --trust-all-tools --output-format stream-json` emitted valid ACP events, then returned `UsageLimitReachedError` for the monthly limit. `/usage` returned the same limit error. |
+| Antigravity (`agy`) | `1.5.11` | PASS | Exact `agy -p "..." --output-format json` returned the requested text, conversation id, duration, and token usage. A separate plan-mode run exited zero with an empty response after a denied command; the adapter must treat empty/denied results as capability failure. |
 | Copilot | not installed | BLOCKED: missing CLI | Cannot verify JSONL or exit-code-3 quota behavior. |
 | OpenCode | not installed | BLOCKED: missing CLI | Cannot verify v2 command or free-model provider. |
 | Claude | `2.1.301` | SKIPPED by policy | Installed, but no prompt was sent. Claude remains disabled until Pro is confirmed and smoke-tested. Installed version is also below the handoff's cited `2.1.302+` behavior boundary. |
@@ -46,8 +46,11 @@ No account IDs, tokens, request IDs, or credentials are stored in this report.
 
 ## MCP checks
 
+- The repository's `jcode-tools` MCP server passes its standalone initialize +
+  tools/list smoke test. It is not wired into each vendor CLI yet.
 - Codex lists enabled local MCP servers, but the nested smoke run could not
-  launch the Windows registered-core helper. This is not a portable MCP pass.
+  launch the Windows registered-core helper. This is not a portable vendor MCP
+  pass.
 - Kiro's MCP inventory contains empty default/workspace groups.
 - Antigravity reports no MCP servers configured.
 - Claude reports no MCP servers configured and remains skipped.

@@ -29,6 +29,22 @@ test('codex probe: handles a missing 5h window (suspended for many accounts)', (
   assert.equal(parsed.windowMinutes, 10080);
 });
 
+test('codex probe: parses current primary/secondary windows and Unix reset seconds', () => {
+  const parsed = parseCodexRateLimits({
+    id: 2,
+    result: {
+      rateLimits: {
+        primary: { usedPercent: 3, windowDurationMins: 300, resetsAt: 1795061920 },
+        secondary: { usedPercent: 35, windowDurationMins: 10080, resetsAt: 1795509096 },
+      },
+    },
+  });
+  assert.ok(parsed);
+  assert.equal(parsed.remainingFraction, 0.65);
+  assert.equal(parsed.windowMinutes, 10080);
+  assert.equal(parsed.resetsAt, new Date(1795509096 * 1000).toISOString());
+});
+
 test('codex probe: returns null on garbage', () => {
   assert.equal(parseCodexRateLimits({ result: {} }), null);
   assert.equal(parseCodexRateLimits(null), null);

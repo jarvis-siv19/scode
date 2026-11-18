@@ -130,7 +130,7 @@ test('graph-query: errors clearly when no graph exists in the repo', async () =>
 
 test('graph-query: queries the graph via a fake graphify binary', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'jcode-graph-query-test-'));
-  const { mkdir, chmod } = await import('node:fs/promises');
+  const { mkdir } = await import('node:fs/promises');
   await mkdir(join(dir, 'graphify-out'), { recursive: true });
   await writeFile(join(dir, 'graphify-out', 'graph.json'), JSON.stringify({
     directed: false,
@@ -139,21 +139,18 @@ test('graph-query: queries the graph via a fake graphify binary', async () => {
     links: [],
     built_at_commit: 'abc',
   }));
-  const binDir = join(dir, 'bin');
-  await mkdir(binDir, { recursive: true });
-  const fake = join(binDir, 'graphify');
-  await writeFile(fake, '#!/bin/sh\necho "FAKE: $*"\n');
-  await chmod(fake, 0o755);
+  const fake = join(dir, 'fake-graphify.mjs');
+  await writeFile(fake, 'console.log(`FAKE: ${process.argv.slice(2).join(" ")}`);\n');
   const savedCwd = process.cwd();
-  const savedPath = process.env.PATH;
   process.chdir(dir);
-  process.env.PATH = `${binDir}:${savedPath ?? ''}`;
   try {
-    const result = await queryGraphTool({ kind: 'explain', question: 'greet' });
+    const result = await queryGraphTool(
+      { kind: 'explain', question: 'greet' },
+      { binary: process.execPath, binaryArgs: [fake] },
+    );
     assert.equal(result.isError, false);
     assert.match(result.text, /FAKE: explain greet/);
   } finally {
     process.chdir(savedCwd);
-    process.env.PATH = savedPath;
   }
 });

@@ -236,7 +236,7 @@ export async function buildGraph(
 export async function runGraphQuery(
   repoPath: string,
   kind: GraphQueryKind,
-  options: { question?: string; target?: string; budget?: number; depth?: number; binary?: string } = {},
+  options: { question?: string; target?: string; budget?: number; depth?: number; binary?: string; binaryArgs?: string[] } = {},
 ): Promise<GraphQueryResult> {
   const graphPath = graphJsonPath(repoPath);
   const budget = options.budget ?? GRAPHIFY_DEFAULT_BUDGET;
@@ -263,7 +263,7 @@ export async function runGraphQuery(
       args = ['god-nodes', '--top', '10', '--graph', graphPath, '--json'];
       break;
   }
-  const result = await runCommand(options.binary ?? 'graphify', args, { cwd: repoPath, timeoutMs: GRAPHIFY_QUERY_TIMEOUT_MS });
+  const result = await runCommand(options.binary ?? 'graphify', [...(options.binaryArgs ?? []), ...args], { cwd: repoPath, timeoutMs: GRAPHIFY_QUERY_TIMEOUT_MS });
   const text = result.stdout.trim() || result.stderr.trim();
   if (result.code === 0 || result.code === 3 || result.code === 4) {
     return { ok: true, text: text || '[graph-query: the graph returned no output]' };

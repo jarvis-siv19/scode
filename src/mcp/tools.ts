@@ -166,14 +166,24 @@ const MAX_GRAPH_CHARS = 8000;
  * with the agent's cwd, which may be a jcode worktree — resolveMainCheckout
  * walks to the main checkout, where the graph lives.
  */
-export async function queryGraphTool(args: { kind?: GraphQueryKind; question?: string; target?: string; budget?: number; depth?: number }): Promise<ToolResult> {
+export async function queryGraphTool(
+  args: { kind?: GraphQueryKind; question?: string; target?: string; budget?: number; depth?: number },
+  runtime: { binary?: string; binaryArgs?: string[] } = {},
+): Promise<ToolResult> {
   const kind = args.kind ?? 'query';
   const repoPath = await resolveMainCheckout(process.cwd());
   const meta = await readGraphMeta(repoPath);
   if (!meta) {
     return error(`graph-query: no code graph at ${graphJsonPath(repoPath)}. Run \`jcode graph init\` in the repo root (or wait for the next jcode dispatch, which builds it automatically when graphify is installed).`);
   }
-  const result = await runGraphQuery(repoPath, kind, { question: args.question, target: args.target, budget: args.budget, depth: args.depth });
+  const result = await runGraphQuery(repoPath, kind, {
+    question: args.question,
+    target: args.target,
+    budget: args.budget,
+    depth: args.depth,
+    binary: runtime.binary,
+    binaryArgs: runtime.binaryArgs,
+  });
   if (!result.ok) return error(`graph-query: ${result.text}`);
   const text = result.text;
   if (text.length > MAX_GRAPH_CHARS) {
