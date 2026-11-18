@@ -1,7 +1,8 @@
 name: Release
 
-# Manual-only until the owner approves an available npm package name.
 on:
+  push:
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
