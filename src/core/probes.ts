@@ -1,0 +1,308 @@
+/**
+ * Quota probes — one record per backend/account/window, normalized to
+ * { remainingFraction, resetsAt, windowMinutes } (handoff §5).
+ *
+ * Probes first, manual fallback: a probe result always replaces a manual
+ * value when it next succeeds. Every probe is best-effort and time-boxed;
+ * a failed probe returns null (unknown), never a fabricated number.
+ */
+import { execFile, spawn } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import type { JcodeConfig } from '../config.js';
+import type { BackendId, QuotaWindow } from './types.js';
+
+export const PROBE_TIMEOUT_MS = 30_000;
+/** Vendors update usage at >= 5 min granularity; probing faster is noise. */
+export const PROBE_TTL_MS = 5 * 60 * 1000;
+/** Manual entries age out after a day — stale numbers are worse than unknown. */
+export const MANUAL_TTL_MS = 24 * 60 * 60 * 1000;
+
+function windowFrom(
+  remainingFraction: number | null,
+  resetsAt: string | null,
+  windowMinutes: number | null,
+  extra?: Partial<QuotaWindow>,
+): QuotaWindow {
+  // Round to 4 decimals: 1 - 80/100 is 0.19999999999999996 in IEEE-754,
+  // and quota comparisons should not trip on float noise.
+  const rounded = remainingFraction === null ? null : Math.round(remainingFraction * 10_000) / 10_000;
+  return {
+    remainingFraction: rounded,
+    resetsAt,
+    windowMinutes,
+    source: 'probe',
+    observedAt: new Date().toISOString(),
+    ...extra,
+  };
+}
+
+function runCapture(
+  command: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  timeoutMs: number,
+  stdin?: string,
+): Promise<{ stdout: string; stderr: string; exitCode: number | null }> {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, { env, shell: false, windowsHide: true });
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill('SIGKILL');
+      resolve({ stdout, stderr, exitCode: null });
+    }, timeoutMs);
+    timer.unref();
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString();
+      if (stdout.length > 1_000_000) stdout = stdout.slice(-1_000_000);
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString();
+      if (stderr.length > 200_000) stderr = stderr.slice(-200_000);
+    });
+    child.on('error', () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ stdout, stderr, exitCode: null });
+    });
+    child.on('close', (exitCode) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ stdout, stderr, exitCode });
+    });
+    if (stdin !== undefined) {
+      child.stdin.write(stdin);
+    }
+    child.stdin.end();
+  });
+}
+
+// ─── Codex: app-server JSON-RPC account/rateLimits/read ─────────────────────
+// Consumes no quota. One JSON-RPC request over stdio; the server prints
+// newline-delimited JSON responses. Windows: 5h (300) / weekly (10080) /
+// monthly (43200). The 5h window has been suspended for many accounts since
+// ~Jul 2026 — handle absent windows, never assume them.
+
+export interface CodexRateLimitWindow {
+  usedPercent: number;
+  windowMinutes?: number;
+  resetsAt?: string | null;
+}
+
+export function parseCodexRateLimits(payload: unknown): QuotaWindow | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+  const root = payload as Record<string, unknown>;
+  // Response envelope: { jsonrpc, id, result: {...} } — accept both shapes.
+  const result = (root.result ?? root) as Record<string, unknown>;
+  const windowsRaw = result.rateLimits ?? result.windows ?? result;
+  if (typeof windowsRaw !== 'object' || windowsRaw === null) return null;
+
+  const windows: Array<{ name: string; remainingFraction: number; resetsAt: string | null; windowMinutes: number }> = [];
+  for (const [name, value] of Object.entries(windowsRaw as Record<string, unknown>)) {
+    if (typeof value !== 'object' || value === null) continue;
+    const w = value as CodexRateLimitWindow & Record<string, unknown>;
+    const used = typeof w.usedPercent === 'number' ? w.usedPercent
+      : typeof w.used_percent === 'number' ? w.used_percent
+        : typeof w.percentUsed === 'number' ? w.percentUsed
+          : null;
+    if (used === null || Number.isNaN(used)) continue;
+    const windowMinutes =
+      typeof w.windowMinutes === 'number' ? w.windowMinutes
+        : name.includes('5h') || name.includes('five') ? 300
+          : name.includes('week') ? 10080
+            : name.includes('month') ? 43200
+              : 0;
+    const resetsAt =
+      typeof w.resetsAt === 'string' ? w.resetsAt
+        : typeof w.resets_at === 'string' ? w.resets_at
+          : typeof w.resetAt === 'string' ? w.resetAt
+            : null;
+    windows.push({ name, remainingFraction: Math.round(Math.max(0, 1 - used / 100) * 10_000) / 10_000, resetsAt, windowMinutes });
+  }
+  if (windows.length === 0) return null;
+  // The binding constraint is the tightest window.
+  const tightest = windows.reduce((a, b) => (a.remainingFraction <= b.remainingFraction ? a : b));
+  return windowFrom(tightest.remainingFraction, tightest.resetsAt, tightest.windowMinutes, { windows });
+}
+
+export async function probeCodex(config: JcodeConfig, account: 'a' | 'b'): Promise<QuotaWindow | null> {
+  const home = account === 'a' ? config.codexHomes.a : config.codexHomes.b;
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  if (home) env.CODEX_HOME = home;
+  const request = `${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'account/rateLimits/read', params: {} })}\n`;
+  const { stdout } = await runCapture('codex', ['app-server'], env, PROBE_TIMEOUT_MS, request);
+  for (const line of stdout.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('{')) continue;
+    try {
+      const parsed = parseCodexRateLimits(JSON.parse(trimmed) as unknown);
+      if (parsed) return parsed;
+    } catch {
+      // Not a JSON response line — keep scanning.
+    }
+  }
+  return null;
+}
+
+// ─── Kiro: `kiro-cli chat --no-interactive "/usage"` ─────────────────────────
+// Output format is vendor-controlled text; parse flexibly. If the shape is
+// unrecognised, return null rather than guessing.
+
+export function parseKiroUsage(output: string): QuotaWindow | null {
+  const text = output.replace(/\u001b\[[0-9;]*m/g, ''); // strip ANSI
+  // Look for "X% used" / "used: X%" / "remaining: Y%".
+  const usedMatch = text.match(/used[^0-9]{0,12}(\d+(?:\.\d+)?)\s*%/i);
+  const remainingMatch = text.match(/remain[^0-9]{0,12}(\d+(?:\.\d+)?)\s*%/i);
+  let remaining: number | null = null;
+  if (remainingMatch) remaining = Number(remainingMatch[1]) / 100;
+  else if (usedMatch) remaining = Math.max(0, 1 - Number(usedMatch[1]) / 100);
+  if (remaining === null || Number.isNaN(remaining)) return null;
+  // Reset: "resets <date>" / "reset at <date>" — accept ISO-ish dates only.
+  const resetMatch = text.match(/resets?\b[^0-9]{0,12}([0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9:.+-Zz]*)/i);
+  const resetsAt = resetMatch ? new Date(resetMatch[1]).toISOString() : null;
+  return windowFrom(remaining, Number.isNaN(Date.parse(resetsAt ?? '')) ? null : resetsAt, null);
+}
+
+export async function probeKiro(): Promise<QuotaWindow | null> {
+  const { stdout, exitCode } = await runCapture(
+    'kiro-cli',
+    ['chat', '--no-interactive', '/usage'],
+    process.env,
+    PROBE_TIMEOUT_MS,
+  );
+  if (exitCode !== 0) return null;
+  return parseKiroUsage(stdout);
+}
+
+// ─── agy: community reader against the undocumented local gRPC endpoint ─────
+// Weakest probe — design for it failing. If the reader is absent, return null
+// and the router degrades to reactive mode (per-run usage + 429s).
+
+export async function probeAgy(): Promise<QuotaWindow | null> {
+  const { stdout, exitCode } = await runCapture('agy-cli-usage', ['--json'], process.env, PROBE_TIMEOUT_MS);
+  if (exitCode !== 0 || !stdout.trim()) return null;
+  try {
+    const data = JSON.parse(stdout) as Record<string, unknown>;
+    const remaining =
+      typeof data.remainingFraction === 'number' ? data.remainingFraction
+        : typeof data.remainingPercent === 'number' ? data.remainingPercent / 100
+          : typeof data.usedPercent === 'number' ? Math.max(0, 1 - data.usedPercent / 100)
+            : null;
+    if (remaining === null || Number.isNaN(remaining)) return null;
+    const resetsAt = typeof data.resetsAt === 'string' ? data.resetsAt : null;
+    return windowFrom(remaining, resetsAt, null);
+  } catch {
+    return null;
+  }
+}
+
+// ─── Copilot: no account-level quota via the CLI ─────────────────────────────
+// Per-run accounting comes from the final `result` event's `usage`
+// (premiumRequests) in the copilot adapter. Account-level remaining needs
+// GitHub's Copilot billing/usage API or a community reader — not wired here,
+// so this probe honestly returns null. Exit code 3 (limit reached) is the
+// hard signal and is handled in the adapter/dispatcher, not the probe.
+
+export async function probeCopilot(): Promise<QuotaWindow | null> {
+  return null;
+}
+
+// ─── OpenCode: no native quota (bring-your-own-provider) ─────────────────────
+// Usage lives in local logs; `ccusage` turns them into tokens + cost, which is
+// spend, not remaining. There is no remaining-fraction to report, so the probe
+// returns null and the TUI says so. If OpenCode points at a subscription pool
+// (ChatGPT/Copilot), its runs draw on the SAME pool as the codex/copilot
+// adapters — never treat it as free capacity.
+
+export async function probeOpencode(): Promise<QuotaWindow | null> {
+  return null;
+}
+
+// ─── Claude: status-line rate_limits file ────────────────────────────────────
+// v2.1.80+ status lines expose five_hour / seven_day with used_percentage +
+// resets_at. A status-line script writes these to a file the router reads
+// (updates only when Claude Code runs). Probe only — the adapter stays
+// disabled until Pro is confirmed live. Path override: JCODE_CLAUDE_RATE_LIMITS_FILE.
+
+export function parseClaudeRateLimits(payload: unknown): QuotaWindow | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+  const root = payload as Record<string, unknown>;
+  const limits = (root.rate_limits ?? root) as Record<string, unknown>;
+  const windows: Array<{ name: string; remainingFraction: number; resetsAt: string | null; windowMinutes: number }> = [];
+  for (const [name, value] of Object.entries(limits)) {
+    if (typeof value !== 'object' || value === null) continue;
+    const w = value as Record<string, unknown>;
+    const used = typeof w.used_percentage === 'number' ? w.used_percentage
+      : typeof w.usedPercent === 'number' ? w.usedPercent : null;
+    if (used === null || Number.isNaN(used)) continue;
+    const resetsAt = typeof w.resets_at === 'string' ? w.resets_at
+      : typeof w.resetsAt === 'string' ? w.resetsAt : null;
+    windows.push({
+      name,
+      remainingFraction: Math.round(Math.max(0, 1 - used / 100) * 10_000) / 10_000,
+      resetsAt,
+      windowMinutes: name.includes('five') ? 300 : name.includes('seven') ? 10080 : 0,
+    });
+  }
+  if (windows.length === 0) return null;
+  const tightest = windows.reduce((a, b) => (a.remainingFraction <= b.remainingFraction ? a : b));
+  return windowFrom(tightest.remainingFraction, tightest.resetsAt, tightest.windowMinutes, { windows });
+}
+
+export async function probeClaude(): Promise<QuotaWindow | null> {
+  const file = process.env.JCODE_CLAUDE_RATE_LIMITS_FILE
+    ?? join(homedir(), '.jcode', 'claude-rate-limits.json');
+  try {
+    const text = await readFile(file, 'utf8');
+    return parseClaudeRateLimits(JSON.parse(text) as unknown);
+  } catch {
+    return null;
+  }
+}
+
+// ─── Dispatcher ─────────────────────────────────────────────────────────────
+
+export async function probeBackend(id: BackendId, config: JcodeConfig): Promise<QuotaWindow | null> {
+  switch (id) {
+    case 'codex-a': return probeCodex(config, 'a');
+    case 'codex-b': return probeCodex(config, 'b');
+    case 'kiro': return probeKiro();
+    case 'agy': return probeAgy();
+    case 'copilot': return probeCopilot();
+    case 'opencode': return probeOpencode();
+    case 'claude': return probeClaude();
+    default: return null;
+  }
+}
+
+/**
+ * Is `binary` on PATH? Returns the version string when it answers.
+ * Only a spawn failure (ENOENT) means absent — a binary that runs but exits
+ * non-zero on its version flag (pdftotext --version exits 1) is present.
+ */
+export function cliInfo(binary: string, versionArgs: string[] = ['--version']): Promise<{ present: boolean; version?: string }> {
+  return new Promise((resolve) => {
+    execFile(binary, versionArgs, { timeout: 10_000, windowsHide: true }, (error, stdout, stderr) => {
+      if (error && (error as NodeJS.ErrnoException).code === 'ENOENT') return resolve({ present: false });
+      const text = `${stdout}${stderr}`.trim().split('\n')[0]?.trim() ?? '';
+      resolve({ present: true, version: text || undefined });
+    });
+  });
+}
+
+export const BACKEND_BINARIES: Record<BackendId, string> = {
+  'codex-a': 'codex',
+  'codex-b': 'codex',
+  kiro: 'kiro-cli',
+  agy: 'agy',
+  copilot: 'copilot',
+  opencode: 'opencode',
+  claude: 'claude',
+};

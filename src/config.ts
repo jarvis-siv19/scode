@@ -8,6 +8,32 @@ export interface JcodeConfig {
   claudeEnabled: boolean;
   codexHomes: { a?: string; b?: string };
   opencodeModel: string;
+  /** Attach to a warm `opencode serve` to avoid MCP cold-boot. */
+  opencodeAttachUrl?: string;
+  /** Cap Copilot autonomous steps per run (premium-request budget). */
+  copilotMaxContinues?: number;
+  /** Claude `-p` turn cap (default 25). Only used when claude is enabled. */
+  claudeMaxTurns?: number;
+  /** Optional extra spend cap per run, passed as `--max-budget-usd`. */
+  claudeMaxBudgetUsd?: number;
+  /** Optional hermetic MCP config for claude (`--mcp-config`). */
+  claudeMcpConfig?: string;
+  /** Caveman token-efficiency layer (Phase 3). Off by default. */
+  caveman?: {
+    enabled?: boolean;
+    mode?: 'proxy' | 'skill-only';
+    perBackend?: Partial<Record<import('./core/types.js').BackendId, boolean>>;
+  };
+  /**
+   * Graphify code graph. enabled: build/query the per-repo graph (default
+   * true; set JCODE_GRAPHIFY=false or enabled: false to turn it off).
+   * autoBuild: build the graph before dispatch when it is missing or stale
+   * (default true). No-op when the graphify binary is not installed.
+   */
+  graphify?: {
+    enabled?: boolean;
+    autoBuild?: boolean;
+  };
 }
 
 const defaults: JcodeConfig = {
@@ -28,6 +54,16 @@ export const statePaths = () => ({
   quota: join(stateHome(), 'quota.json'),
   ledger: join(stateHome(), 'ledger.jsonl'),
   lessons: join(stateHome(), 'lessons.md'),
+  /** Per-task session ids, keyed by task id then backend (handoff §5). */
+  sessions: join(stateHome(), 'sessions.json'),
+  /** Last `jcode doctor` result (Phase 0 gate record). */
+  smoke: join(stateHome(), 'smoke.json'),
+  /** Last `jcode learn` report (Phase 5). */
+  learnReport: join(stateHome(), 'learn-report.md'),
+  /** MCP tool-call log, for the Phase 5 dead-tool check. */
+  toolCalls: join(stateHome(), 'tool-calls.jsonl'),
+  /** Scheduled jobs (cron + one-shot). */
+  schedules: join(stateHome(), 'schedules.json'),
 });
 
 export async function ensureStateHome(): Promise<void> {
@@ -54,6 +90,16 @@ export async function loadConfig(): Promise<JcodeConfig> {
       ...fromDisk.codexHomes,
       a: process.env.JCODE_CODEX_A_HOME || fromDisk.codexHomes?.a,
       b: process.env.JCODE_CODEX_B_HOME || fromDisk.codexHomes?.b,
+    },
+    opencodeAttachUrl: process.env.JCODE_OPENCODE_ATTACH || fromDisk.opencodeAttachUrl,
+    caveman: {
+      ...fromDisk.caveman,
+      enabled: process.env.JCODE_CAVEMAN === 'true' ? true : (fromDisk.caveman?.enabled ?? false),
+    },
+    graphify: {
+      ...fromDisk.graphify,
+      enabled: process.env.JCODE_GRAPHIFY === 'false' ? false : (fromDisk.graphify?.enabled ?? true),
+      autoBuild: fromDisk.graphify?.autoBuild ?? true,
     },
   };
 }

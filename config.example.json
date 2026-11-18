@@ -1,0 +1,1 @@
+{"caveman":{"enabled":false,"mode":"proxy","perBackend":{}},"claudeEnabled":false,"claudeMaxTurns":25,"codexHomes":{"a":"C:\\Users\\you\\.codex-a","b":"C:\\Users\\you\\.codex-b"},"copilotMaxContinues":10,"defaultTimeoutMs":1800000,"graphify":{"autoBuild":true,"enabled":true},"opencodeModel":"opencode/big-pickle","quotaFloor":0.1}
