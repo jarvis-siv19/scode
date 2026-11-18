@@ -5,6 +5,7 @@ import { selectBackend } from './core/policy.js';
 import { backendSnapshots } from './core/quota.js';
 import { BACKEND_IDS, type BackendId } from './core/types.js';
 import { runDoctor } from './doctor.js';
+import { installForBackend, toolsStatus } from './mcp/install.js';
 
 export type Command =
   | { name: 'tui' }
@@ -12,6 +13,7 @@ export type Command =
   | { name: 'status' }
   | { name: 'doctor'; quick?: boolean; full?: boolean }
   | { name: 'learn' }
+  | { name: 'tools'; action: 'install' | 'status' }
   | { name: 'help' };
 
 function isBackend(value: string): value is BackendId {
@@ -30,6 +32,11 @@ export function parseArgs(argv: string[]): Command {
       quick: rest.includes('--quick'),
       full: rest.includes('--full'),
     };
+  }
+  if (name === 'tools') {
+    const action = rest[0];
+    if (action !== 'install' && action !== 'status') throw new Error('Usage: jcode tools <install|status>');
+    return { name: 'tools', action };
   }
   if (name !== 'run') throw new Error(`Unknown command: ${name}`);
 
@@ -66,6 +73,7 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
       '  jcode status                             per-backend headroom (runs probes)',
       '  jcode doctor [--quick] [--full]          Phase 0 machine smoke tests',
       '  jcode learn                              learning fold (Phase 5)',
+      '  jcode tools <install|status>             wire the jcode-tools MCP server into backends',
       '',
       `Backends: ${BACKEND_IDS.join(', ')}`,
     ].join('\n'));
@@ -78,6 +86,25 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
   if (command.name === 'doctor') {
     const { exitCode } = await runDoctor({ quick: command.quick, full: command.full });
     return exitCode;
+  }
+  if (command.name === 'tools') {
+    if (command.action === 'status') {
+      const rows = await toolsStatus();
+      for (const row of rows) {
+        console.log(`${row.backend.padEnd(10)} ${row.configured ? 'configured' : 'not configured'}  ${row.path}`);
+      }
+      console.log('agy        skipped (config path unconfirmed — see `jcode tools install`)');
+      return 0;
+    }
+    // codex-a and codex-b share one config file — install once.
+    const targets: BackendId[] = ['codex-a', 'claude', 'kiro', 'copilot', 'opencode', 'agy'];
+    let errors = 0;
+    for (const backend of targets) {
+      const outcome = await installForBackend(backend);
+      if (outcome.status === 'error') errors++;
+      console.log(`${backend.padEnd(10)} ${outcome.status.padEnd(16)} ${outcome.detail}`);
+    }
+    return errors > 0 ? 1 : 0;
   }
   // status runs probes (cached 5 min); run reuses cached state for speed.
   const snapshots = await backendSnapshots({ refresh: command.name === 'status' });

@@ -10,7 +10,7 @@
  * SKIP with a reason, never a pass and never a failure. Live dispatches
  * consume a small amount of quota; --quick skips them.
  */
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -24,6 +24,7 @@ import { ensureStateHome, loadConfig, statePaths } from './config.js';
 import { probeAgy, probeClaude, probeCodex, probeKiro, cliInfo } from './core/probes.js';
 import type { BackendId } from './core/types.js';
 import { tempDir } from './core/worktree.js';
+import { SERVER_NAME, serverScriptPath } from './mcp/install.js';
 
 export type CheckStatus = 'pass' | 'fail' | 'skip';
 
@@ -97,6 +98,72 @@ async function runSmokeDispatch(backend: BackendId, adapter: BackendAdapter): Pr
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+/**
+ * Load-test the jcode-tools MCP server: spawn it, speak JSON-RPC over stdio,
+ * and expect tools/list to return pdf-read, latex-build, file-peek.
+ */
+async function testMcpServer(): Promise<CheckResult> {
+  const script = serverScriptPath();
+  try {
+    await readFile(script, 'utf8');
+  } catch {
+    return { id: 'mcp-server', label: 'MCP server: jcode-tools loads', status: 'fail', detail: `built server missing at ${script} — run npm run build` };
+  }
+  return new Promise((resolvePromise) => {
+    const child = spawn(process.execPath, [script], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    let buffer = '';
+    let settled = false;
+    const finish = (result: CheckResult) => {
+      if (settled) return;
+      settled = true;
+      child.kill();
+      resolvePromise(result);
+    };
+    const timer = setTimeout(() => finish({
+      id: 'mcp-server', label: 'MCP server: jcode-tools loads', status: 'fail', detail: 'no tools/list response within 10s',
+    }), 10_000);
+    const send = (message: Record<string, unknown>) => child.stdin.write(`${JSON.stringify(message)}\n`);
+    child.stdout.on('data', (chunk) => {
+      buffer += chunk.toString();
+      let newline = buffer.indexOf('\n');
+      while (newline >= 0) {
+        const line = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        newline = buffer.indexOf('\n');
+        if (!line) continue;
+        try {
+          const message = JSON.parse(line) as { id?: number; result?: { tools?: Array<{ name: string }> } };
+          if (message.id === 1) {
+            send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+            send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
+          } else if (message.id === 2) {
+            clearTimeout(timer);
+            const names = (message.result?.tools ?? []).map((tool) => tool.name).sort();
+            const expected = ['file-peek', 'latex-build', 'pdf-read'];
+            const ok = JSON.stringify(names) === JSON.stringify(expected);
+            finish({
+              id: 'mcp-server',
+              label: 'MCP server: jcode-tools loads',
+              status: ok ? 'pass' : 'fail',
+              detail: ok ? `tools/list returned ${names.join(', ')}` : `expected ${expected.join(', ')}, got ${names.join(', ') || 'none'}`,
+            });
+          }
+        } catch {
+          // Not JSON — ignore (server logs go to stderr, not stdout).
+        }
+      }
+    });
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      finish({ id: 'mcp-server', label: 'MCP server: jcode-tools loads', status: 'fail', detail: error.message });
+    });
+    send({
+      jsonrpc: '2.0', id: 1, method: 'initialize',
+      params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'jcode-doctor', version: '0.1.0' } },
+    });
+  });
 }
 
 export async function runDoctor(options: DoctorOptions = {}): Promise<{ results: CheckResult[]; exitCode: number }> {
@@ -313,28 +380,32 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<{ results:
     });
   }
 
-  // ── MCP config presence (full load test needs the Phase 4 server) ────
+  // ── MCP server load test + per-backend wiring ─────────────────────────
+  push(await testMcpServer());
   const home = homedir();
   const mcpPaths: Array<{ id: string; label: string; path: string }> = [
-    { id: 'mcp-codex', label: 'MCP config: codex config.toml', path: join(home, '.codex', 'config.toml') },
-    { id: 'mcp-kiro', label: 'MCP config: kiro mcp.json', path: join(home, '.kiro', 'settings', 'mcp.json') },
-    { id: 'mcp-claude', label: 'MCP config: claude .mcp.json', path: join(home, '.claude.json') },
+    { id: 'mcp-codex', label: 'MCP wiring: codex config.toml', path: join(home, '.codex', 'config.toml') },
+    { id: 'mcp-kiro', label: 'MCP wiring: kiro mcp.json', path: join(home, '.kiro', 'settings', 'mcp.json') },
+    { id: 'mcp-claude', label: 'MCP wiring: claude .claude.json', path: join(home, '.claude.json') },
+    { id: 'mcp-copilot', label: 'MCP wiring: copilot mcp-config.json', path: join(home, '.copilot', 'mcp-config.json') },
+    { id: 'mcp-opencode', label: 'MCP wiring: opencode opencode.json', path: join(home, '.config', 'opencode', 'opencode.json') },
   ];
   for (const { id, label, path } of mcpPaths) {
-    let exists = false;
+    let text: string | null = null;
     try {
-      await readFile(path, 'utf8');
-      exists = true;
+      text = await readFile(path, 'utf8');
     } catch {
-      exists = false;
+      text = null;
     }
     push({
       id,
       label,
-      status: 'skip',
-      detail: exists
-        ? 'config file exists — full load test needs the Phase 4 MCP server'
-        : 'no config file yet — the Phase 4 server will add one',
+      status: text !== null && text.includes(SERVER_NAME) ? 'pass' : 'skip',
+      detail: text === null
+        ? `no config file yet — run \`jcode tools install\``
+        : text.includes(SERVER_NAME)
+          ? 'jcode-tools entry present'
+          : `config exists without jcode-tools — run \`jcode tools install\``,
     });
   }
 

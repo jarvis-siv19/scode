@@ -18,7 +18,9 @@ The first host is a Windows laptop. Runtime state lives in `%USERPROFILE%\.jcode
   jobs pane with live elapsed / tokens / output tail, help overlay (`?`)
 - ✅ Phase 3 — Caveman efficiency layer (opt-in per backend, telemetry off,
   Auto off; every run records `cavemanWrapped` in the ledger for measurement)
-- ⏳ Phase 4 — ledger-justified MCP tools
+- ✅ Phase 4 — MCP tool suite v1: `jcode-tools` server (pdf-read, latex-build,
+  file-peek) + `jcode tools install` wiring into Codex/Claude/Kiro/Copilot/
+  OpenCode configs; doctor load-tests the server for real
 - ⏳ Phase 5 — learning loop (`jcode learn`)
 - ⏳ Phase 6 — measured policy refinement
 

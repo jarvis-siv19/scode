@@ -282,11 +282,15 @@ export async function probeBackend(id: BackendId, config: JcodeConfig): Promise<
   }
 }
 
-/** Is `binary` on PATH? Returns the version string when it answers. */
-export function cliInfo(binary: string): Promise<{ present: boolean; version?: string }> {
+/**
+ * Is `binary` on PATH? Returns the version string when it answers.
+ * Only a spawn failure (ENOENT) means absent — a binary that runs but exits
+ * non-zero on its version flag (pdftotext --version exits 1) is present.
+ */
+export function cliInfo(binary: string, versionArgs: string[] = ['--version']): Promise<{ present: boolean; version?: string }> {
   return new Promise((resolve) => {
-    execFile(binary, ['--version'], { timeout: 10_000, windowsHide: true }, (error, stdout, stderr) => {
-      if (error) return resolve({ present: false });
+    execFile(binary, versionArgs, { timeout: 10_000, windowsHide: true }, (error, stdout, stderr) => {
+      if (error && (error as NodeJS.ErrnoException).code === 'ENOENT') return resolve({ present: false });
       const text = `${stdout}${stderr}`.trim().split('\n')[0]?.trim() ?? '';
       resolve({ present: true, version: text || undefined });
     });
