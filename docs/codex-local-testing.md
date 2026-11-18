@@ -1,15 +1,15 @@
-# What Codex needs to test on the host (Windows laptop)
+# What Codex needs to test on the Mac host
 
 Everything buildable in a clean environment is built: all six phases, the
 lessons store, the real claude adapter (disabled), the prompt pack, CI, and
 these docs. What is left can only be verified where the CLIs are installed
 and logged in. This is that list, in order. Work from a fresh clone of
-`sivab193/jcode` after PR #1 merges, on a branch named with the day's date.
+`sivab193/scode` after PR #1 merges, on a branch named with the day's date.
 
 ## 0. Baseline
 
-- `npm ci` then `npm test` — expect all tests green (95 at last count).
-  If any fail on Windows, that is a real bug: fix it on the branch, do not
+- `npm ci` then `npm test` — expect all 125 tests green.
+  If any fail on macOS, that is a real bug: fix it on the branch, do not
   skip it.
 - `jcode status` — every installed backend should show a version string.
   Missing CLIs show as unavailable with the reason. Nothing should show a
@@ -36,19 +36,19 @@ logged-in CLI:
   (`npx @caveman-ai/cli@latest`). If the wrap breaks a CLI's JSON output,
   that backend goes on the do-not-wrap list (`caveman.perBackend`).
 - **MCP server load test** — must pass; it spawns the real server and lists
-  the three tools over JSON-RPC.
+  all four tools over JSON-RPC.
 
-Doctor writes `%USERPROFILE%\.jcode\smoke.json`. Keep it — it is the record
+Doctor writes `~/.jcode/smoke.json`. Keep it — it is the record
 of what this machine can do.
 
 ## 2. One real run per backend
 
 For each installed backend, run a real task through the router (not a
 smoke test): `jcode run --backend <id> "<a small real task in a test repo>"`.
-Check each run in the ledger (`%USERPROFILE%\.jcode\ledger.jsonl`):
+Check each run in the ledger (`~/.jcode/ledger.jsonl`):
 
 - `run-started` and `run-finished` records exist with matching task ids.
-- The worktree was created under `.git\jcode-worktrees\<taskId>` and removed
+- The worktree was created under `.git/jcode-worktrees/<taskId>` and removed
   on success.
 - Tokens / cost / premium-requests are recorded when the backend reports
   them; absent when it does not. Never a fabricated number.
@@ -69,7 +69,7 @@ Check each run in the ledger (`%USERPROFILE%\.jcode\ledger.jsonl`):
 
 ## 4. TUI
 
-Bare `jcode` in Windows Terminal. Check: task bar accepts input, backends
+Bare `jcode` in Terminal or iTerm2. Check: task bar accepts input, backends
 pane shows quota bars and reset times, `m` opens manual quota entry and the
 entry shows as MANUAL, up/down cycles the backend override, `?` shows help,
 `r` refreshes probes, jobs show live elapsed time, and `q` quits cleanly.
@@ -80,9 +80,9 @@ replace the TUI.
 
 - `jcode tools install`, then `jcode tools status` — all five backends
   should show configured (agy is skipped by design; see §7).
-- Ask codex (or any backend) to use `file-peek` on a real file, `pdf-read`
-  on a real PDF, and `latex-build` on a real .tex file. Each call is logged
-  to `tool-calls.jsonl` — verify the log has the calls.
+- Ask a backend to use `file-peek` on a real file, `pdf-read` on a real PDF,
+  `latex-build` on a real .tex file, and `graph-query` on an initialized
+  repo. Each call is logged to `tool-calls.jsonl` — verify all four calls.
 - If a backend does not pick up the server, check its config file first
   (paths are in `src/mcp/install.ts`); the wiring is the usual suspect, not
   the server.
@@ -122,7 +122,7 @@ Do not enable before then. When Pro is live:
 ## 9. Learn loop (after a few days of real runs)
 
 - `jcode learn` — the report must show real per-backend x class stats.
-- `%USERPROFILE%\.jcode\lessons.md` must accumulate one entry per fold.
+- `~/.jcode/lessons.md` must accumulate one entry per fold.
 - If a proposal looks wrong, say which numbers disagree — do not tune the
   thresholds to make the report look nicer.
 
@@ -133,8 +133,9 @@ Do not enable before then. When Pro is live:
 - `jcode schedule tick` — must dispatch through the real router (check the
   ledger: the run-started record carries a `scheduleId`), and the one-shot
   must show disabled in `jcode schedule list` afterwards.
-- `jcode schedule install` — must print a `schtasks` command on Windows.
-  Do NOT create the scheduled task without asking — it is a system change.
+- `jcode schedule install` — must print a crontab line on macOS, not a
+  `schtasks` command. Do NOT install it without asking — changing the
+  user's crontab is a system change.
 - Open the TUI with a due schedule pending: it must fire as a `[sched]`
   job within a minute, and the Jobs pane must show upcoming schedules.
 

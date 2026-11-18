@@ -1,4 +1,4 @@
-# Publishing jcode to npm
+# Publishing scode to npm
 
 jcode is TypeScript on Node, so npm is its home. There is no PyPI package:
 PyPI is for Python, and jcode has no Python in it. A PyPI shim that

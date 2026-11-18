@@ -1,11 +1,17 @@
-# jcode
+# scode
+
+[![npm](https://img.shields.io/npm/v/scode?logo=npm)](https://www.npmjs.com/package/scode)
+[![CI](https://github.com/sivab193/scode/actions/workflows/ci.yml/badge.svg)](https://github.com/sivab193/scode/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+`scode` is the npm package and repository; it installs the `jcode` command.
 
 `jcode` is a local-first, quota-aware router for coding-agent CLIs. One command
 chooses an eligible backend for a whole job, launches the vendor's unmodified
 binary, streams its output, and records the routing decision in a local ledger.
 
-The first host is a Windows laptop. Runtime state lives in `%USERPROFILE%\.jcode`
-(or `JCODE_HOME`) and is never committed.
+The first host is macOS. Runtime state lives in `~/.jcode` (or `JCODE_HOME`)
+and is never committed.
 
 ## Status
 
@@ -18,9 +24,9 @@ The first host is a Windows laptop. Runtime state lives in `%USERPROFILE%\.jcode
   jobs pane with live elapsed / tokens / output tail, help overlay (`?`)
 - ✅ Phase 3 — Caveman efficiency layer (opt-in per backend, telemetry off,
   Auto off; every run records `cavemanWrapped` in the ledger for measurement)
-- ✅ Phase 4 — MCP tool suite v1: `jcode-tools` server (pdf-read, latex-build,
-  file-peek) + `jcode tools install` wiring into Codex/Claude/Kiro/Copilot/
-  OpenCode configs; doctor load-tests the server for real
+- ✅ Phase 4 — MCP tool suite v1: `jcode-tools` server (file-peek, pdf-read,
+  latex-build, graph-query) + `jcode tools install` wiring into Codex/Claude/
+  Kiro/Copilot/OpenCode configs; doctor load-tests the server for real
 - ✅ Phase 5 — learning loop: `jcode learn` folds the ledger into
   `~/.jcode/learn-report.md` (per-backend×class stats, Caveman on/off,
   retries, prompt patterns, tool backlog, dead tools, proposed tweaks)
@@ -39,13 +45,14 @@ seeded into each job's worktree), CI on Node 20/22, and host docs
 Claude stays disabled until Claude Pro is confirmed live (~Nov 30, 2026) and
 its smoke test passes. Never enable it on your own.
 
-## Install
+## Quick start
 
 Requires Node.js 20+ and at least one authenticated backend CLI.
 
 ```sh
-npm install -g scode   # installs the `jcode` command
-npx -y scode           # or run without installing
+npx -y scode doctor --quick   # try it without installing
+npm install -g scode          # install the `jcode` command
+jcode                          # open the terminal UI
 ```
 
 From source instead:
@@ -59,6 +66,13 @@ npm link
 Publishing notes (name, first publish, releases) live in
 [docs/publishing.md](docs/publishing.md). `jcode` is taken on npm, so the
 package is `scode`; the binary is still `jcode`.
+
+## Links
+
+- [npm package](https://www.npmjs.com/package/scode)
+- [source code](https://github.com/sivab193/scode)
+- [issues and feature requests](https://github.com/sivab193/scode/issues)
+- [releases](https://github.com/sivab193/scode/releases)
 
 ## Terminal UI
 
@@ -186,7 +200,7 @@ working rules below — while the ledger keeps the raw brief.
 
 ```sh
 npm run build    # TypeScript build
-npm test         # build + node:test suite (95 tests)
+npm test         # build + node:test suite (125 tests)
 npm run check    # typecheck only
 ```
 

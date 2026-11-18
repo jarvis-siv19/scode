@@ -3,7 +3,7 @@
 [iTerm2](https://github.com/gnachman/iTerm2) (macOS only, GPL, ~18k stars,
 current 3.7.x) is the deepest terminal on the Mac. Evaluated against jcode:
 it helps the Mac workflow, but nothing in the router depends on it — jcode's
-Ink TUI runs in any terminal, and the first host is a Windows laptop.
+Ink TUI runs in any terminal, and the first host is a Mac.
 
 ## What actually helps
 
@@ -56,9 +56,8 @@ finishes). Config-only, no code. Worth setting up once long runs are common.
   own agent awareness, but it watches sessions, it doesn't route jobs across
   quota windows. That is jcode's job. No conflict, no overlap worth coding
   against.
-- **Windows/Linux** — iTerm2 is macOS-only, so none of this applies to the
-  first host (Windows laptop). The cross-platform equivalent of the tmux
-  story is plain tmux over SSH in Windows Terminal.
+- **Windows/Linux** — iTerm2 is macOS-only. The cross-platform equivalent
+  of the tmux story is plain tmux over SSH in a capable terminal.
 
 ## Verdict
 

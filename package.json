@@ -14,12 +14,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/sivab193/jcode.git"
+    "url": "https://github.com/sivab193/scode.git"
   },
   "bugs": {
-    "url": "https://github.com/sivab193/jcode/issues"
+    "url": "https://github.com/sivab193/scode/issues"
   },
-  "homepage": "https://github.com/sivab193/jcode#readme",
+  "homepage": "https://github.com/sivab193/scode#readme",
   "author": "Sivaganesh Balaganesh",
   "keywords": [
     "cli",
