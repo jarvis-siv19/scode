@@ -12,6 +12,12 @@ export interface JcodeConfig {
   opencodeAttachUrl?: string;
   /** Cap Copilot autonomous steps per run (premium-request budget). */
   copilotMaxContinues?: number;
+  /** Caveman token-efficiency layer (Phase 3). Off by default. */
+  caveman?: {
+    enabled?: boolean;
+    mode?: 'proxy' | 'skill-only';
+    perBackend?: Partial<Record<import('./core/types.js').BackendId, boolean>>;
+  };
 }
 
 const defaults: JcodeConfig = {
@@ -64,5 +70,9 @@ export async function loadConfig(): Promise<JcodeConfig> {
       b: process.env.JCODE_CODEX_B_HOME || fromDisk.codexHomes?.b,
     },
     opencodeAttachUrl: process.env.JCODE_OPENCODE_ATTACH || fromDisk.opencodeAttachUrl,
+    caveman: {
+      ...fromDisk.caveman,
+      enabled: process.env.JCODE_CAVEMAN === 'true' ? true : (fromDisk.caveman?.enabled ?? false),
+    },
   };
 }

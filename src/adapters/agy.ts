@@ -1,3 +1,5 @@
+import { loadConfig } from '../config.js';
+import { wrapSpawn } from '../core/caveman.js';
 import type { RunRequest } from '../core/types.js';
 import { runProcess } from './process.js';
 import type { AdapterCallbacks, BackendAdapter } from './types.js';
@@ -11,8 +13,11 @@ import type { AdapterCallbacks, BackendAdapter } from './types.js';
  */
 export class AgyAdapter implements BackendAdapter {
   async run(request: RunRequest, callbacks: AdapterCallbacks) {
+    const config = await loadConfig();
     const args = ['-p', request.brief, '--output-format', 'json'];
     if (request.sessionId) args.push('--conversation', request.sessionId);
-    return runProcess({ command: 'agy', args }, request, callbacks);
+    const { spec, wrapped } = await wrapSpawn({ command: 'agy', args }, request.backend, config);
+    const result = await runProcess(spec, request, callbacks);
+    return { ...result, cavemanWrapped: wrapped };
   }
 }

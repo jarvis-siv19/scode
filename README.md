@@ -14,9 +14,10 @@ The first host is a Windows laptop. Runtime state lives in `%USERPROFILE%\.jcode
 - ✅ Phase 1 — router core: real kiro/agy/copilot/opencode adapters, quota
   probes, rule-based classifier, quota-floor + soonest-expiring policy,
   worktree-per-job dispatch with one fallback, JSONL ledger
-- ⏳ Phase 2 — full TUI (task bar dispatch works; manual quota entry `m`,
-  backend override, and jobs-pane detail still to come)
-- ⏳ Phase 3 — Caveman efficiency layer (opt-in, telemetry off, Auto off)
+- ✅ Phase 2 — full TUI: manual quota entry (`m`), backend override (↑↓),
+  jobs pane with live elapsed / tokens / output tail, help overlay (`?`)
+- ✅ Phase 3 — Caveman efficiency layer (opt-in per backend, telemetry off,
+  Auto off; every run records `cavemanWrapped` in the ledger for measurement)
 - ⏳ Phase 4 — ledger-justified MCP tools
 - ⏳ Phase 5 — learning loop (`jcode learn`)
 - ⏳ Phase 6 — measured policy refinement

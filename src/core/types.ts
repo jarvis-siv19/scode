@@ -86,4 +86,6 @@ export interface RunResult {
   worktree?: string;
   /** What this run fell back from, if anything. */
   fellBackFrom?: { backend: BackendId; errorClass: ErrorClass; reason: string };
+  /** True when the run went through the Caveman proxy (Phase 3). */
+  cavemanWrapped?: boolean;
 }

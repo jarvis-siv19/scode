@@ -1,4 +1,5 @@
 import { loadConfig } from '../config.js';
+import { wrapSpawn } from '../core/caveman.js';
 import type { RunRequest } from '../core/types.js';
 import { runProcess } from './process.js';
 import type { AdapterCallbacks, BackendAdapter } from './types.js';
@@ -20,10 +21,11 @@ export class CopilotAdapter implements BackendAdapter {
     if (config.copilotMaxContinues !== undefined) {
       args.push('--max-autopilot-continues', String(config.copilotMaxContinues));
     }
-    const result = await runProcess({ command: 'copilot', args }, request, callbacks);
+    const { spec, wrapped } = await wrapSpawn({ command: 'copilot', args }, request.backend, config);
+    const result = await runProcess(spec, request, callbacks);
     if (result.exitCode === 3) {
-      return { ...result, success: false, errorClass: 'quota' as const };
+      return { ...result, success: false, errorClass: 'quota' as const, cavemanWrapped: wrapped };
     }
-    return result;
+    return { ...result, cavemanWrapped: wrapped };
   }
 }

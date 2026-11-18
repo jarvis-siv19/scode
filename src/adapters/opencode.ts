@@ -1,4 +1,5 @@
 import { loadConfig } from '../config.js';
+import { wrapSpawn } from '../core/caveman.js';
 import type { RunRequest } from '../core/types.js';
 import { runProcess } from './process.js';
 import type { AdapterCallbacks, BackendAdapter } from './types.js';
@@ -20,6 +21,8 @@ export class OpenCodeAdapter implements BackendAdapter {
     const args = ['run', request.brief, '--format', 'json', '-m', config.opencodeModel];
     if (config.opencodeAttachUrl) args.push('--attach', config.opencodeAttachUrl);
     if (request.sessionId) args.push('--continue');
-    return runProcess({ command: 'opencode', args }, request, callbacks);
+    const { spec, wrapped } = await wrapSpawn({ command: 'opencode', args }, request.backend, config);
+    const result = await runProcess(spec, request, callbacks);
+    return { ...result, cavemanWrapped: wrapped };
   }
 }
