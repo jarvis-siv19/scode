@@ -8,6 +8,10 @@ export interface JcodeConfig {
   claudeEnabled: boolean;
   codexHomes: { a?: string; b?: string };
   opencodeModel: string;
+  /** Attach to a warm `opencode serve` to avoid MCP cold-boot. */
+  opencodeAttachUrl?: string;
+  /** Cap Copilot autonomous steps per run (premium-request budget). */
+  copilotMaxContinues?: number;
 }
 
 const defaults: JcodeConfig = {
@@ -28,6 +32,10 @@ export const statePaths = () => ({
   quota: join(stateHome(), 'quota.json'),
   ledger: join(stateHome(), 'ledger.jsonl'),
   lessons: join(stateHome(), 'lessons.md'),
+  /** Per-task session ids, keyed by task id then backend (handoff §5). */
+  sessions: join(stateHome(), 'sessions.json'),
+  /** Last `jcode doctor` result (Phase 0 gate record). */
+  smoke: join(stateHome(), 'smoke.json'),
 });
 
 export async function ensureStateHome(): Promise<void> {
@@ -55,5 +63,6 @@ export async function loadConfig(): Promise<JcodeConfig> {
       a: process.env.JCODE_CODEX_A_HOME || fromDisk.codexHomes?.a,
       b: process.env.JCODE_CODEX_B_HOME || fromDisk.codexHomes?.b,
     },
+    opencodeAttachUrl: process.env.JCODE_OPENCODE_ATTACH || fromDisk.opencodeAttachUrl,
   };
 }

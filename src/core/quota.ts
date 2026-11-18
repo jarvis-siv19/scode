@@ -1,8 +1,9 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { loadConfig, statePaths } from '../config.js';
+import { ensureStateHome, loadConfig, statePaths } from '../config.js';
+import { BACKEND_BINARIES, MANUAL_TTL_MS, PROBE_TTL_MS, cliInfo, probeBackend } from './probes.js';
 import { BACKEND_IDS, type BackendId, type BackendSnapshot, type QuotaWindow } from './types.js';
 
-type QuotaState = Partial<Record<BackendId, QuotaWindow>>;
+export type QuotaState = Partial<Record<BackendId, QuotaWindow>>;
 
 const models: Record<BackendId, string> = {
   'codex-a': 'vendor default',
@@ -24,27 +25,122 @@ export async function readQuotaState(): Promise<QuotaState> {
 }
 
 export async function writeQuotaState(state: QuotaState): Promise<void> {
+  await ensureStateHome();
   await writeFile(statePaths().quota, `${JSON.stringify(state, null, 2)}\n`);
 }
 
-export async function backendSnapshots(): Promise<BackendSnapshot[]> {
+function placeholder(now: string): QuotaWindow {
+  return {
+    remainingFraction: null,
+    resetsAt: null,
+    windowMinutes: null,
+    source: 'placeholder',
+    observedAt: now,
+  };
+}
+
+/**
+ * Run every probe whose cached value is stale, then merge results into state.
+ * A probe result always replaces a manual value when it succeeds. Manual
+ * values past their TTL are dropped back to placeholder. Cooling-down
+ * markers survive a probe refresh — only time (or a successful run) clears
+ * them. Returns the merged state.
+ */
+export async function refreshProbes(): Promise<QuotaState> {
   const [state, config] = await Promise.all([readQuotaState(), loadConfig()]);
+  const now = Date.now();
+  const next: QuotaState = { ...state };
+  const toProbe: BackendId[] = [];
+
+  for (const id of BACKEND_IDS) {
+    const current = state[id];
+    // Manual entries age out.
+    if (current?.source === 'manual' && current.manualExpiresAt && Date.parse(current.manualExpiresAt) <= now) {
+      delete next[id];
+    }
+    // Expired cooldowns clear.
+    if (current?.coolingUntil && Date.parse(current.coolingUntil) <= now) {
+      const { coolingUntil: _dropped, ...rest } = current;
+      next[id] = rest;
+    }
+    // Fresh probe results are still good — vendors update at >= 5 min granularity.
+    if (current?.source === 'probe' && now - Date.parse(current.observedAt) < PROBE_TTL_MS) continue;
+    toProbe.push(id);
+  }
+  // Probes are independent — run them in parallel so `status` stays fast.
+  const results = await Promise.all(
+    toProbe.map(async (id) => ({ id, probed: await probeBackend(id, config).catch(() => null) })),
+  );
+  for (const { id, probed } of results) {
+    if (!probed) continue;
+    // Preserve an active cooldown marker across the refresh.
+    const coolingUntil = next[id]?.coolingUntil;
+    next[id] = coolingUntil && Date.parse(coolingUntil) > now ? { ...probed, coolingUntil } : probed;
+  }
+  await writeQuotaState(next);
+  return next;
+}
+
+/** Manual quota entry (TUI `m` key): remaining fraction + reset time, marked MANUAL. */
+export async function setManualQuota(id: BackendId, remainingFraction: number, resetsAt: string | null): Promise<void> {
+  if (remainingFraction < 0 || remainingFraction > 1) throw new Error('remaining fraction must be between 0 and 1');
+  const state = await readQuotaState();
+  const now = new Date();
+  state[id] = {
+    remainingFraction,
+    resetsAt,
+    windowMinutes: null,
+    source: 'manual',
+    observedAt: now.toISOString(),
+    manualExpiresAt: new Date(now.getTime() + MANUAL_TTL_MS).toISOString(),
+  };
+  await writeQuotaState(state);
+}
+
+/** Mark a backend cooling-down until its reset (after a rate-limit failure). */
+export async function markCoolingDown(id: BackendId, untilIso: string | null): Promise<void> {
+  const state = await readQuotaState();
+  const current = state[id] ?? placeholder(new Date().toISOString());
+  state[id] = { ...current, coolingUntil: untilIso ?? new Date(Date.now() + 60 * 60 * 1000).toISOString() };
+  await writeQuotaState(state);
+}
+
+/**
+ * Snapshots for status/TUI/policy. Availability is honest: a backend is
+ * 'available' only when its CLI binary is present on this machine, it is not
+ * disabled, and it is not cooling down. Set `refresh` to run probes first
+ * (status does; the TUI refreshes on `r`).
+ */
+export async function backendSnapshots(options?: { refresh?: boolean }): Promise<BackendSnapshot[]> {
+  const state = options?.refresh ? await refreshProbes() : await readQuotaState();
+  const config = await loadConfig();
   const now = new Date().toISOString();
+  const nowMs = Date.now();
+
+  const infos = await Promise.all(
+    BACKEND_IDS.map(async (id) => ({ id, info: await cliInfo(BACKEND_BINARIES[id]) })),
+  );
+  const infoById = new Map(infos.map(({ id, info }) => [id, info]));
+
   return BACKEND_IDS.map((id) => {
-    const quota = state[id] ?? {
-      remainingFraction: null,
-      resetsAt: null,
-      windowMinutes: null,
-      source: 'placeholder' as const,
-      observedAt: now,
-    };
+    const quota = state[id] ?? placeholder(now);
     const disabled = id === 'claude' && !config.claudeEnabled;
-    return {
-      id,
-      model: models[id],
-      status: disabled ? 'disabled' : 'available',
-      quota,
-      note: disabled ? 'Claude Pro not confirmed' : quota.source === 'placeholder' ? 'quota unknown' : undefined,
-    };
+    const info = infoById.get(id) ?? { present: false };
+    const cooling = !!quota.coolingUntil && Date.parse(quota.coolingUntil) > nowMs;
+    // codex-b without its own CODEX_HOME would silently use account A's login
+    // and double-count one pool — treat it as unavailable, not available.
+    const missingHome = id === 'codex-b' && !config.codexHomes.b;
+    const status = disabled ? 'disabled'
+      : cooling ? 'cooling-down'
+        : !info.present || missingHome ? 'unavailable'
+          : 'available';
+    const note = disabled ? 'Claude Pro not confirmed'
+      : cooling ? `cooling down until ${quota.coolingUntil}`
+        : !info.present ? `${BACKEND_BINARIES[id]} not installed`
+          : missingHome ? 'no CODEX_HOME configured (JCODE_CODEX_B_HOME)'
+            : quota.source === 'placeholder' ? 'quota unknown'
+              : quota.source === 'manual' ? 'MANUAL entry'
+                : undefined;
+    return { id, model: models[id], status, quota, cliPresent: info.present, cliVersion: info.version, note };
   });
 }
