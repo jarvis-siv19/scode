@@ -1,0 +1,24 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db
+
+# jcode runtime state must never be committed
+.jcode/
+config.json
+quota.json
+ledger.jsonl
+lessons.md
+.smoke/
+
+# Agent/vendor credentials and local state
+.codex/
+.claude/
+.kiro/cache/
+auth.json
+credentials.json
+*.token
