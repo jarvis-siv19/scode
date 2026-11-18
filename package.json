@@ -1,5 +1,5 @@
 {
-  "name": "jcode",
+  "name": "@sivab193/jcode",
   "version": "0.1.0",
   "description": "Local-first quota-aware router for coding agent CLIs",
   "type": "module",
@@ -12,12 +12,37 @@
     "README.md",
     "LICENSE"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sivab193/jcode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sivab193/jcode/issues"
+  },
+  "homepage": "https://github.com/sivab193/jcode#readme",
+  "author": "Sivaganesh Balaganesh",
+  "keywords": [
+    "cli",
+    "router",
+    "coding-agent",
+    "codex",
+    "claude-code",
+    "copilot",
+    "opencode",
+    "kiro",
+    "quota",
+    "tui"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "check": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && node --test tests/*.test.ts"
+    "test": "npm run build && node --test tests/*.test.ts",
+    "prepublishOnly": "npm run build"
   },
   "engines": {
     "node": ">=20"

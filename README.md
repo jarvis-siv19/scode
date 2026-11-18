@@ -44,10 +44,33 @@ its smoke test passes. Never enable it on your own.
 Requires Node.js 20+ and at least one authenticated backend CLI.
 
 ```sh
+npm install -g @sivab193/jcode   # installs the `jcode` command
+npx -y @sivab193/jcode           # or run without installing
+```
+
+From source instead:
+
+```sh
 npm install
 npm run build
 npm link
 ```
+
+Publishing notes (name, first publish, releases) live in
+[docs/publishing.md](docs/publishing.md). `jcode` is taken on npm, so the
+package is scoped `@sivab193/jcode`; the binary is still `jcode`.
+
+## Terminal UI
+
+Bare `jcode` opens the TUI: a task bar on top, backends with live quota bars
+on the left, running jobs on the right. `m` enters quota by hand when a probe
+is missing, `↑↓` pins a backend, `?` shows the keys.
+
+![jcode terminal UI](docs/shots/tui-main.png)
+
+More shots: [help overlay](docs/shots/tui-help.png),
+[manual quota entry](docs/shots/tui-manual.png),
+[typed task with backend override](docs/shots/tui-override.png).
 
 ## Usage
 

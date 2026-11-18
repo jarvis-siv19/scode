@@ -43,6 +43,19 @@ export function App() {
     return () => clearInterval(timer);
   }, []);
 
+  /**
+   * Command keys (m/r/?/q) fire from the App's own input handler AND reach
+   * TextInput, which would type them into the task bar — so pressing `m` on
+   * an empty bar opened the manual modal and left "m" in the task. Drop a
+   * lone command character typed into an empty bar: those keys are reserved
+   * as the first keystroke by design (they open their mode instead), so no
+   * real task text is ever lost — a task can only start with them after
+   * other text is already present, and then this guard does not apply.
+   */
+  const handleTaskChange = (value: string) => {
+    setTask((prev) => (prev === '' && value.length === 1 && ['m', 'r', '?', 'q'].includes(value) ? prev : value));
+  };
+
   useInput((input, key) => {
     if (mode === 'help') {
       setMode('task');
@@ -140,7 +153,7 @@ export function App() {
       ) : (
         <TaskBar
           value={task}
-          onChange={setTask}
+          onChange={handleTaskChange}
           onSubmit={(value) => void submit(value)}
           disabled={running}
           overrideLabel={override ? `backend: ${override}` : 'backend: auto'}
