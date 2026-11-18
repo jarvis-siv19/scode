@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 
 export interface JcodeConfig {
   quotaFloor: number;
@@ -78,7 +78,9 @@ export async function loadConfig(): Promise<JcodeConfig> {
     fromDisk = JSON.parse(await readFile(paths.config, 'utf8')) as Partial<JcodeConfig>;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    await writeFile(paths.config, `${JSON.stringify(defaults, null, 2)}\n`, { flag: 'wx' }).catch(() => undefined);
+    // Missing config means defaults. Do not create it while reading: multiple
+    // concurrent CLI/test processes could otherwise observe a partially
+    // written JSON file on first launch.
   }
 
   return {
