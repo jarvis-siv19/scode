@@ -24,7 +24,10 @@ The first host is a Windows laptop. Runtime state lives in `%USERPROFILE%\.jcode
 - ✅ Phase 5 — learning loop: `jcode learn` folds the ledger into
   `~/.jcode/learn-report.md` (per-backend×class stats, Caveman on/off,
   retries, prompt patterns, tool backlog, dead tools, proposed tweaks)
-- ⏳ Phase 6 — measured policy refinement
+- ✅ Phase 6 — measured policy refinement: expected-cost scoring with
+  Beta-smoothed success priors (20-run floor per pair, reset time priced
+  in), rules-based effort selection, and the Laya classification seam
+  (`JCODE_LAYA_URL`; rules take over when Laya is not serving)
 
 Claude stays disabled until Claude Pro is confirmed live (~Nov 30, 2026) and
 its smoke test passes. Never enable it on your own.
@@ -50,7 +53,9 @@ jcode status                  # per-backend headroom (runs quota probes)
 jcode doctor                  # Phase 0 smoke tests for this machine
 jcode doctor --quick          # presence + probes only, no live dispatches
 jcode doctor --full           # also test the Caveman wrap on codex
-jcode learn                   # learning fold (implemented in Phase 5)
+jcode learn                   # learning fold (Phase 5) -> ~/.jcode/learn-report.md
+jcode tools install           # wire the jcode-tools MCP server into backends
+jcode tools status            # show MCP wiring per backend
 ```
 
 `jcode run` defaults to the current directory and runs each job in its own git
@@ -80,7 +85,7 @@ unknown/unavailable; placeholder data is labeled, never faked as live.
 
 ## Policy
 
-Rule-based routing (Laya integration is a later phase): AWS work → kiro,
+Rule-based routing, refined by measured priors (Phase 6): AWS work → kiro,
 huge-repo exploration → agy, GitHub work → copilot, free-model work →
 opencode, deep reasoning → claude (once live). Among eligible backends the
 soonest-expiring quota goes first, accounts below the floor (default 10%
@@ -88,6 +93,18 @@ remaining) are skipped unless they are the only option, and cooling-down
 accounts are never picked. On a classified failure the dispatcher falls back
 once: quota failures cool the account down and route sideways, capability
 failures escalate to a stronger backend.
+
+When a (backend, class) pair has 20+ runs in the ledger, expected-cost
+scoring ranks the pick: `(1 − P(success)) × fallback penalty + expected
+tokens × quota scarcity × reset factor`. The reset factor is the point — a
+backend resetting in 6 hours is nearly free to spend now, one resetting in
+6 days is not. Below 20 runs the rule order applies unchanged, and scoring
+never auto-applies policy changes; the durable edits stay proposals in the
+learn report.
+
+Classification is rules-first with a Laya seam: when Laya is serving
+(`JCODE_LAYA_URL`, `POST /classify`), jcode asks it first and falls back to
+the rules when it is not configured or its answer is invalid.
 
 ## Terminal notes
 
@@ -98,7 +115,7 @@ failures escalate to a stronger backend.
 
 ```sh
 npm run build    # TypeScript build
-npm test         # build + node:test suite (classifier, policy, probes, worktrees)
+npm test         # build + node:test suite (86 tests)
 npm run check    # typecheck only
 ```
 

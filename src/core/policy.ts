@@ -1,9 +1,12 @@
 import type { Classification } from './classifier.js';
+import { rankByScore, type Priors } from './scoring.js';
 import type { BackendId, BackendSnapshot } from './types.js';
 
 export interface Selection {
   backend: BackendId;
   reason: string;
+  /** True when measured priors ranked the pick (Phase 6 scoring). */
+  scored?: boolean;
 }
 
 /** Rule preferences per task class (handoff §5). Claude is the best-tier
@@ -22,6 +25,12 @@ const PREFERENCES: Record<Classification['taskClass'], BackendId[]> = {
 export interface PolicyOptions {
   /** Never pick an account below this remaining fraction unless it is the only option. */
   quotaFloor?: number;
+  /** Measured priors from the ledger (Phase 6). When at least one eligible
+   * candidate is measured for this class, expected-cost scoring ranks the
+   * pick; otherwise the rule-based preference order applies unchanged. */
+  priors?: Priors;
+  /** Clock override for scoring (tests). */
+  now?: Date;
 }
 
 /**
@@ -71,7 +80,24 @@ export function selectBackend(
 
   const candidates = eligible(preferred);
   const withHeadroom = aboveFloor(candidates);
-  const ordered = orderByExpiry(withHeadroom.length > 0 ? withHeadroom : candidates);
+  const pool = withHeadroom.length > 0 ? withHeadroom : candidates;
+
+  // Phase 6: measured priors rank the pick by expected cost. Scoring only
+  // applies when at least one candidate is measured (>= 20 runs); otherwise
+  // the rule-based order below runs unchanged.
+  if (options?.priors) {
+    const ranked = rankByScore(classification.taskClass, pool, options.priors, options.now);
+    if (ranked && ranked.length > 0) {
+      const best = ranked[0];
+      return {
+        backend: best.backend,
+        reason: `${classification.reason}; scored by measured priors — ${best.breakdown}`,
+        scored: true,
+      };
+    }
+  }
+
+  const ordered = orderByExpiry(pool);
   // Prefer the rule's first choice when its quota is healthy; otherwise the
   // soonest-expiring eligible backend. (A preferred backend with a distant
   // reset beats a non-preferred one expiring sooner only when the task class

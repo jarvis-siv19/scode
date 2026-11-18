@@ -388,6 +388,11 @@ export function renderLearnReport(analysis: LearnAnalysis): string {
     lines.push(`| ${stats.backend} | ${stats.classType} | ${stats.runs} | ${pct(stats.successRate)} | ${Math.round(stats.medianDurationMs / 1000)}s | ${tokens(stats.meanInputTokens)} | ${tokens(stats.meanOutputTokens)} | ${stats.meanCostUsd === null ? 'n/a' : `$${stats.meanCostUsd.toFixed(4)}`} | ${stats.totalPremiumRequests} |`);
   }
   lines.push('');
+  const measured = analysis.classStats.filter((stats) => stats.runs >= 20);
+  lines.push(measured.length > 0
+    ? `Measured pairs (≥20 runs — Phase 6 scoring is active for these): ${measured.map((stats) => `${stats.backend}/${stats.classType}`).join(', ')}.`
+    : 'No (backend, class) pair has 20 runs yet — scoring stays on the rule-based order until one does.');
+  lines.push('');
   if (analysis.caveman.length > 0) {
     lines.push('## Caveman on vs off', '');
     for (const comparison of analysis.caveman) {

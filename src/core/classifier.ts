@@ -1,3 +1,5 @@
+import { layaClassify } from './laya.js';
+
 export type TaskClass =
   | 'review-tests'
   | 'architecture'
@@ -28,4 +30,12 @@ export function classify(brief: string): Classification {
   if (/\b(free model|cheap|quick question|one-liner|trivial|draft)\b/.test(text)) return { taskClass: 'free-model', difficulty: 'low', reason: 'free-model / low-stakes keywords' };
   if (/\b(review|test|tests|lint|typo)\b/.test(text)) return { taskClass: 'review-tests', difficulty: 'low', reason: 'review/test keywords' };
   return { taskClass: 'general', difficulty: 'medium', reason: 'default rule' };
+}
+
+/**
+ * Laya first, rules as fallback (Phase 6). When Laya is not serving
+ * (JCODE_LAYA_URL unset) or its answer is invalid, this is exactly classify().
+ */
+export async function classifyAsync(brief: string): Promise<Classification> {
+  return (await layaClassify(brief)) ?? classify(brief);
 }

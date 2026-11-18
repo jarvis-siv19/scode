@@ -1,8 +1,9 @@
 import { resolve } from 'node:path';
-import { classify } from './core/classifier.js';
+import { classifyAsync } from './core/classifier.js';
 import { dispatch } from './core/dispatcher.js';
 import { selectBackend } from './core/policy.js';
 import { backendSnapshots } from './core/quota.js';
+import { getPriors } from './core/scoring.js';
 import { BACKEND_IDS, type BackendId } from './core/types.js';
 import { runDoctor } from './doctor.js';
 import { runLearn } from './core/learn.js';
@@ -119,8 +120,9 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
     return 0;
   }
 
-  const classification = classify(command.brief);
-  const selection = selectBackend(classification, snapshots, command.backend);
+  const classification = await classifyAsync(command.brief);
+  const priors = await getPriors();
+  const selection = selectBackend(classification, snapshots, command.backend, { priors });
   console.error(`[jcode] ${selection.backend}: ${selection.reason}`);
   const result = await dispatch({
     brief: command.brief,
