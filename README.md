@@ -204,4 +204,9 @@ npm test         # build + node:test suite (127 tests)
 npm run check    # typecheck only
 ```
 
+The Windows host's Phase 0 verification is blocked on missing CLIs, Kiro's
+monthly quota limit, a common MCP smoke server, and the intentionally deferred
+Claude check. See
+[`docs/phase-0-windows.md`](docs/phase-0-windows.md) for observed results.
+
 No paid API credits are required or used. OpenCode defaults to free models.
