@@ -29,6 +29,13 @@ The first host is a Windows laptop. Runtime state lives in `%USERPROFILE%\.jcode
   in), rules-based effort selection, and the Laya classification seam
   (`JCODE_LAYA_URL`; rules take over when Laya is not serving)
 
+Beyond the phases: the lessons store (`jcode learn` appends each fold to
+`~/.jcode/lessons.md`), the real claude adapter (implemented, still disabled
+behind the double-gate until Pro is live), the repo-root prompt pack
+(`prompts/` — brief template, per-backend steering, shared `JCODE_NOTES.md`,
+seeded into each job's worktree), CI on Node 20/22, and host docs
+(`docs/host-setup.md`, `docs/codex-local-testing.md`).
+
 Claude stays disabled until Claude Pro is confirmed live (~Nov 30, 2026) and
 its smoke test passes. Never enable it on your own.
 
@@ -80,8 +87,11 @@ unknown/unavailable; placeholder data is labeled, never faked as live.
 - **opencode** — v2 only, free models by default (`opencodeModel` in
   `~/.jcode/config.json`). No native quota; if it points at a subscription
   pool it draws on the same pool as that adapter.
-- **claude** — disabled until Pro is live. Quota probe reads a status-line
-  `rate_limits` file when one exists (`JCODE_CLAUDE_RATE_LIMITS_FILE`).
+- **claude** — adapter implemented (`claude -p … --permission-mode
+  acceptEdits --max-turns N`, `--resume`, `--max-budget-usd`) but disabled
+  until Pro is live (config `claudeEnabled` AND `JCODE_CLAUDE_ENABLED=true`).
+  Quota probe reads a status-line `rate_limits` file when one exists
+  (`JCODE_CLAUDE_RATE_LIMITS_FILE`).
 
 ## Policy
 
@@ -106,8 +116,21 @@ Classification is rules-first with a Laya seam: when Laya is serving
 (`JCODE_LAYA_URL`, `POST /classify`), jcode asks it first and falls back to
 the rules when it is not configured or its answer is invalid.
 
-## Terminal notes
+## Prompt pack
 
+Every job runs in a git worktree seeded with the prompt pack from `prompts/`:
+`AGENTS.md` (codex/agy), `CLAUDE.md` (claude), `.kiro/steering/jcode.md`
+(kiro), and the shared `JCODE_NOTES.md` lessons file. Files the repo already
+has are never overwritten. The brief is wrapped in the template
+(`prompts/brief-template.md`) — the user's words verbatim under `## Task`,
+working rules below — while the ledger keeps the raw brief.
+
+## Docs
+
+- [Host setup](docs/host-setup.md) — installing the CLIs, two Codex homes,
+  config, and the weekly `jcode learn` habit.
+- [Codex local testing](docs/codex-local-testing.md) — what can only be
+  verified on the host machine, in order.
 - [iTerm2](docs/iterm2.md) — why it helps on the Mac (tmux `-CC` is the
   `jcode attach` story), and why nothing in the router depends on it.
 
@@ -115,7 +138,7 @@ the rules when it is not configured or its answer is invalid.
 
 ```sh
 npm run build    # TypeScript build
-npm test         # build + node:test suite (86 tests)
+npm test         # build + node:test suite (95 tests)
 npm run check    # typecheck only
 ```
 

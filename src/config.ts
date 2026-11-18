@@ -12,6 +12,12 @@ export interface JcodeConfig {
   opencodeAttachUrl?: string;
   /** Cap Copilot autonomous steps per run (premium-request budget). */
   copilotMaxContinues?: number;
+  /** Claude `-p` turn cap (default 25). Only used when claude is enabled. */
+  claudeMaxTurns?: number;
+  /** Optional extra spend cap per run, passed as `--max-budget-usd`. */
+  claudeMaxBudgetUsd?: number;
+  /** Optional hermetic MCP config for claude (`--mcp-config`). */
+  claudeMcpConfig?: string;
   /** Caveman token-efficiency layer (Phase 3). Off by default. */
   caveman?: {
     enabled?: boolean;

@@ -15,6 +15,7 @@
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { ensureStateHome, statePaths } from '../config.js';
+import { appendLessonEntry } from './lessons.js';
 import { TOOL_NAMES } from '../mcp/tools.js';
 import type { TaskClass } from './classifier.js';
 import type { BackendId } from './types.js';
@@ -470,7 +471,9 @@ export async function runLearn(): Promise<number> {
   const analysis = analyzeLedger(records, toolCalls);
   const report = renderLearnReport(analysis);
   await writeFile(paths.learnReport, report, 'utf-8');
+  const lessonsPath = await appendLessonEntry(analysis);
   console.log(report);
   console.log(`Report written to ${paths.learnReport}`);
+  console.log(`Fold appended to the lessons store at ${lessonsPath}`);
   return 0;
 }

@@ -8,6 +8,7 @@ import { OpenCodeAdapter } from '../adapters/opencode.js';
 import type { BackendAdapter } from '../adapters/types.js';
 import { loadConfig } from '../config.js';
 import { appendLedger } from './ledger.js';
+import { formatBrief, installPromptPack } from './promptPack.js';
 import { backendSnapshots, markCoolingDown } from './quota.js';
 import { getSessionId, saveSessionId } from './sessions.js';
 import type { BackendId, RunResult } from './types.js';
@@ -59,11 +60,17 @@ export async function dispatch(options: DispatchOptions): Promise<RunResult> {
   const worktree: Worktree = options.reuseWorktree ?? (options.dryRun
     ? { path: repoCwd, isWorktree: false }
     : await createWorktree(taskId, repoCwd));
+  if (worktree.isWorktree && !options.reuseWorktree) {
+    const pack = await installPromptPack(worktree.path);
+    if (pack.installed.length > 0) {
+      console.log(`[jcode] prompt pack seeded into worktree: ${pack.installed.join(', ')}`);
+    }
+  }
   const sessionId = await getSessionId(taskId, options.backend);
 
   const request = {
     taskId,
-    brief: options.brief,
+    brief: formatBrief(options.brief),
     backend: options.backend,
     cwd: worktree.path,
     timeoutMs: options.timeoutMs ?? config.defaultTimeoutMs,
@@ -75,7 +82,7 @@ export async function dispatch(options: DispatchOptions): Promise<RunResult> {
     event: 'run-started',
     taskId,
     timestamp: new Date().toISOString(),
-    brief: request.brief,
+    brief: options.brief, // ledger keeps the raw brief, not the wrapped one
     backend: request.backend,
     cwd: repoCwd,
     worktree: worktree.path,
