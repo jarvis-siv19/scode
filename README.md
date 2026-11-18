@@ -44,8 +44,8 @@ its smoke test passes. Never enable it on your own.
 Requires Node.js 20+ and at least one authenticated backend CLI.
 
 ```sh
-npm install -g @sivab193/jcode   # installs the `jcode` command
-npx -y @sivab193/jcode           # or run without installing
+npm install -g scode   # installs the `jcode` command
+npx -y scode           # or run without installing
 ```
 
 From source instead:
@@ -58,7 +58,7 @@ npm link
 
 Publishing notes (name, first publish, releases) live in
 [docs/publishing.md](docs/publishing.md). `jcode` is taken on npm, so the
-package is scoped `@sivab193/jcode`; the binary is still `jcode`.
+package is `scode`; the binary is still `jcode`.
 
 ## Terminal UI
 

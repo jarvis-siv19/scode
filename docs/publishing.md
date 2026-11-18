@@ -6,29 +6,29 @@ downloaded the Node build would only confuse installs — one registry, npm.
 
 ## Name
 
-`jcode` is taken on npm. The package is `@sivab193/jcode` (scoped to the
-author, available as of Nov 18, 2026) and the installed binary is still
-`jcode`:
+`jcode` is taken on npm (an unrelated 0.0.0 MVC framework stub from 2019,
+owned by Johnny Bakker — asking him for a voluntary transfer is allowed,
+but npm will not force one). The package is `scode` (available as of
+Nov 18, 2026) and the installed binary is still `jcode`:
 
 ```sh
-npm install -g @sivab193/jcode   # installs the `jcode` command
-npx -y @sivab193/jcode           # run without installing
+npm install -g scode   # installs the `jcode` command
+npx -y scode           # run without installing
 ```
 
-The alternative is the unscoped `jcode-cli` (also available). Switching is
-one line in `package.json` (`"name"`) plus the README install commands.
+Other names checked free on Nov 18, 2026: `jcode-cli`, `s19code`, `s19c`.
+Switching is one line in `package.json` (`"name"`) plus the README install
+commands.
 
 ## First publish (manual, once)
 
-1. Create an npm account (npmjs.com) with 2FA enabled, and an org-free
-   scope: the `@sivab193` scope belongs to the `sivab193` username, so the
-   account must be that username.
+1. Create an npm account (npmjs.com) with 2FA enabled. Any username works
+   now — `scode` is unscoped, so no scope ownership is needed.
 2. `npm login` on the machine doing the publish.
-3. From the repo root: `npm test` (must be green), then `npm publish
-   --access public`. The `--access public` is required for a scoped package;
-   `publishConfig.access` in `package.json` already sets it, so plain
-   `npm publish` works too.
-4. Verify from a clean machine: `npx -y @sivab193/jcode status` should print
+3. From the repo root: `npm test` (must be green), then `npm publish`.
+   Unscoped packages are public by default; `publishConfig.access` in
+   `package.json` already sets it explicitly.
+4. Verify from a clean machine: `npx -y scode status` should print
    the backend table without cloning the repo.
 
 ## Releases after that (automated)
@@ -44,7 +44,7 @@ git push origin main --tags
 tests, builds, and publishes with npm provenance
 (`--provenance`, tying the tarball to the GitHub run). It needs one repo
 secret: `NODE_AUTH_TOKEN` — an npm automation token (npmjs.com > Access
-Tokens > Granular, scoped to `@sivab193/jcode`, or classic with publish
+Tokens > Granular, scoped to `scode`, or classic with publish
 rights). Without the secret the workflow fails at the publish step and
 nothing ships, which is the safe failure.
 
