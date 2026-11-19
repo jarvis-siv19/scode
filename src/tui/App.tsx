@@ -68,8 +68,12 @@ export function App() {
     // 2000 records ≈ 1000 runs — comfortably covers a heavy week.
     const records = await readLedgerTail(2000);
     setTokenStats(computeTokenStats(records, new Date()));
-    const known = snapshots.filter((item) => item.quota.source !== 'placeholder').length;
-    setMessage(`${known}/${snapshots.length} quotas`);
+    const resolved = snapshots.filter((item) =>
+      item.quota.remainingFraction !== null
+      || item.quotaMode !== 'unknown'
+      || item.status === 'unavailable'
+      || item.status === 'disabled').length;
+    setMessage(`${resolved}/${snapshots.length} limit states resolved`);
   };
 
   useEffect(() => { void refresh(true); }, []);

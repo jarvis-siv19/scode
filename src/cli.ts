@@ -362,11 +362,18 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
   if (command.name === 'status') {
     for (const item of snapshots) {
       const used = item.quota.remainingFraction === null ? null : 1 - item.quota.remainingFraction;
-      const usedLabel = used === null ? 'unknown' : `${Math.round(used * 100)}%`;
-      const reset = item.quota.resetsAt ?? 'unknown';
+      const usedLabel = item.status === 'disabled' ? 'off'
+        : item.status === 'unavailable' ? (item.note?.includes('CODEX_HOME') ? 'no-home' : 'missing')
+          : used === null
+            ? item.quotaMode === 'reactive' ? 'reactive'
+              : item.quotaMode === 'provider' ? (item.id === 'opencode' ? 'provider' : 'metered')
+                : 'unknown'
+            : `${Math.round(used * 100)}%`;
+      const reset = item.quota.resetsAt ?? (item.quotaMode === 'window' ? 'unknown' : 'n/a');
       const version = item.cliVersion ? ` (${item.cliVersion})` : '';
       const note = item.note ? ` — ${item.note}` : '';
-      console.log(`${item.id.padEnd(10)} ${item.status.padEnd(13)} used=${usedLabel.padEnd(8)} reset=${reset} source=${item.quota.source}${version}${note}`);
+      const auth = item.authProvider ? ` auth=${item.authProvider}` : '';
+      console.log(`${item.id.padEnd(10)} ${item.status.padEnd(13)} usage=${usedLabel.padEnd(8)} reset=${reset} source=${item.quota.source}${auth}${version}${note}`);
     }
     return 0;
   }

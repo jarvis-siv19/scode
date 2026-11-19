@@ -1,9 +1,8 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { ensureStateHome, loadConfig, statePaths } from '../config.js';
+import { detectBackendAuth } from './auth.js';
 import { BACKEND_BINARIES, MANUAL_TTL_MS, PROBE_TTL_MS, cliInfo, probeBackend } from './probes.js';
-import { BACKEND_IDS, type BackendId, type BackendSnapshot, type QuotaWindow } from './types.js';
+import { BACKEND_IDS, type BackendId, type BackendSnapshot, type QuotaMode, type QuotaWindow } from './types.js';
 
 export type QuotaState = Partial<Record<BackendId, QuotaWindow>>;
 
@@ -55,6 +54,12 @@ export async function refreshProbes(): Promise<QuotaState> {
   const toProbe: BackendId[] = [];
 
   for (const id of BACKEND_IDS) {
+    // Without a separate home, codex-b is the same account as codex-a. Do not
+    // probe it or retain a duplicated quota window that looks like a second pool.
+    if (id === 'codex-b' && !config.codexHomes.b) {
+      delete next[id];
+      continue;
+    }
     const current = state[id];
     // Manual entries age out.
     if (current?.source === 'manual' && current.manualExpiresAt && Date.parse(current.manualExpiresAt) <= now) {
@@ -119,30 +124,15 @@ export async function backendSnapshots(options?: { refresh?: boolean }): Promise
   const now = new Date().toISOString();
   const nowMs = Date.now();
 
-  const infos = await Promise.all(
-    BACKEND_IDS.map(async (id) => ({ id, info: await cliInfo(BACKEND_BINARIES[id]) })),
+  const details = await Promise.all(
+    BACKEND_IDS.map(async (id) => ({
+      id,
+      info: await cliInfo(BACKEND_BINARIES[id]),
+      authProvider: await detectBackendAuth(id, config),
+    })),
   );
-  const infoById = new Map(infos.map(({ id, info }) => [id, info]));
-
-  const authNotes = new Map<BackendId, string>();
-  try {
-    const agyAccountFile = await readFile(join(homedir(), '.gemini', 'google_accounts.json'), 'utf8');
-    if (JSON.parse(agyAccountFile) && JSON.stringify(agyAccountFile).length > 2) authNotes.set('agy', 'logged in');
-  } catch {}
-  try {
-    const copilotConfig = await readFile(join(homedir(), '.copilot', 'config.json'), 'utf8');
-    if (JSON.parse(copilotConfig)) authNotes.set('copilot', 'logged in');
-  } catch {}
-  try {
-    await readFile(join(homedir(), '.copilot', 'session-store.db'));
-    authNotes.set('copilot', 'logged in');
-  } catch {}
-  try {
-    const opencodeAuth = await readFile(join(homedir(), '.local', 'share', 'opencode', 'auth.json'), 'utf8');
-    const parsed = JSON.parse(opencodeAuth) as Record<string, unknown>;
-    if (Object.keys(parsed).length > 0) authNotes.set('opencode', 'logged in');
-  } catch {}
-  authNotes.set('claude', 'Bedrock authenticated');
+  const infoById = new Map(details.map(({ id, info }) => [id, info]));
+  const authById = new Map(details.map(({ id, authProvider }) => [id, authProvider]));
 
   return BACKEND_IDS.map((id) => {
     const quota = state[id] ?? placeholder(now);
@@ -158,16 +148,22 @@ export async function backendSnapshots(options?: { refresh?: boolean }): Promise
       : cooling ? 'cooling-down'
         : !info.present || missingHome ? 'unavailable'
           : 'available';
-    const accountNote = authNotes.get(id);
+    const authProvider = authById.get(id) ?? undefined;
+    const quotaMode: QuotaMode = quota.remainingFraction !== null ? 'window'
+      : id === 'agy' || id === 'copilot' || id === 'kiro' ? 'reactive'
+        : id === 'opencode' || id === 'claude' ? 'provider'
+          : 'unknown';
     const note = disabled ? 'Claude Pro not confirmed'
       : exhausted ? 'monthly limit reached · renewal time unknown'
       : cooling ? `cooling down until ${quota.coolingUntil}`
         : !info.present ? `${BACKEND_BINARIES[id]} not installed`
           : missingHome ? 'no CODEX_HOME configured (JCODE_CODEX_B_HOME)'
-            : quota.source === 'placeholder' && accountNote ? `${accountNote} · quota unknown`
-              : quota.source === 'placeholder' ? 'quota unknown'
+            : quota.source === 'placeholder' && quotaMode === 'reactive' ? 'limits detected during runs'
+              : quota.source === 'placeholder' && id === 'opencode' ? 'quota belongs to the selected provider'
+                : quota.source === 'placeholder' && id === 'claude' ? 'provider-metered usage'
+                  : quota.source === 'placeholder' ? 'quota probe unavailable'
               : quota.source === 'manual' ? 'MANUAL entry'
                 : undefined;
-    return { id, model: models[id], status, quota, cliPresent: info.present, cliVersion: info.version, note };
+    return { id, model: models[id], status, quota, cliPresent: info.present, cliVersion: info.version, authProvider, quotaMode, note };
   });
 }

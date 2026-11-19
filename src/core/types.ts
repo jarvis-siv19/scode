@@ -15,6 +15,9 @@ export type ThemeId = (typeof THEME_IDS)[number];
 
 export type BackendStatus = 'available' | 'unavailable' | 'cooling-down' | 'disabled';
 
+/** How scode learns about limits when a vendor does not expose a quota window. */
+export type QuotaMode = 'window' | 'reactive' | 'provider' | 'unknown';
+
 /** One quota window, normalized across backends (handoff §5). */
 export interface QuotaWindow {
   remainingFraction: number | null;
@@ -39,6 +42,10 @@ export interface BackendSnapshot {
   /** CLI binary present on this machine (false => status 'unavailable'). */
   cliPresent: boolean;
   cliVersion?: string;
+  /** Human-readable credential/provider path; never contains account names or secrets. */
+  authProvider?: string;
+  /** Window = numeric probe/manual value; reactive = limit errors; provider = provider billing/limits. */
+  quotaMode?: QuotaMode;
   note?: string;
 }
 

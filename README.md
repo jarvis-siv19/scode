@@ -115,6 +115,12 @@ Running `scode` opens the interactive terminal UI. Choose from Ember
 In the TUI, click to pin a backend or select a job; stop a running job with
 the Stop action or `s`. Tab and arrow keys work without a mouse.
 
+Backend rows also show the detected authentication provider without exposing
+account names or credentials. A percentage is shown when the vendor exposes a
+quota window. `REACTIVE` means scode watches run-time limit responses, `BYO`
+means OpenCode uses the selected provider's quota, and `METERED` means usage is
+billed by the configured provider (for example, Claude through Amazon Bedrock).
+
 ## Features
 
 - Routes tasks across supported coding-agent CLIs based on task and quota.
