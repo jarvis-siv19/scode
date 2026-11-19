@@ -1,4 +1,4 @@
-# Publishing jcode to npm
+# Publishing scode to npm
 
 jcode is TypeScript on Node, so npm is its home. There is no PyPI package:
 PyPI is for Python, and jcode has no Python in it. A PyPI shim that
@@ -6,10 +6,8 @@ downloaded the Node build would only confuse installs — one registry, npm.
 
 ## Name
 
-`jcode` is taken on npm by an unrelated package. The repository and local
-package metadata remain `jcode` to match the product specification, so npm
-publishing is intentionally disabled until the owner chooses a registry name
-or obtains the existing name. Do not silently rename the product.
+The npm package is `@sivab193/scode`. The primary installed executable is
+`scode`; `jcode` remains available as a compatibility alias.
 
 ```sh
 npm install
@@ -17,34 +15,30 @@ npm run build
 npm link               # installs the local `jcode` command
 ```
 
-## First publish (manual, once)
+## One-time setup
 
-1. Choose and approve an available npm name (or obtain `jcode`).
-2. Create an npm account (npmjs.com) with 2FA enabled.
-3. `npm login` on the machine doing the publish.
-4. From the repo root: `npm test` (must be green), then `npm publish`.
-   Unscoped packages are public by default; `publishConfig.access` in
-   `package.json` already sets it explicitly.
-5. Verify from a clean machine using the approved package name; `jcode status`
-   should print the backend table without cloning the repo.
+Configure npm Trusted Publishing for `@sivab193/scode`, selecting the GitHub
+repository `sivab193/jcode` and the `release.yml` workflow. Allow direct
+`npm publish`; npm's default for new trusted publishers may allow only staged
+publishing. The workflow uses OIDC and npm provenance, so no npm token or
+GitHub secret is needed. Complete a successful publish within two days of
+creating the trusted publisher, or npm will require you to recreate it.
 
-## Releases after name approval
+## Publishing a release
 
-The release workflow is manual-only until an npm name is approved. After that
-decision, update `package.json`, restore a reviewed tag trigger if desired, and
-then create a version tag:
+Update the package version and create a matching tag:
 
 ```sh
-npm version patch   # or minor / major — bumps package.json, tags v0.1.1
-git push origin main --tags
+npm version patch
+git push origin main --follow-tags
+gh release create v0.1.1 --generate-notes --verify-tag
 ```
 
-`.github/workflows/release.yml` currently requires manual dispatch. It runs the
-tests, builds, and publishes with npm provenance
-(`--provenance`, tying the tarball to the GitHub run). It needs one repository
-secret: `NODE_AUTH_TOKEN` — an npm automation token scoped to the approved
-package name. Without
-the secret the workflow fails at the publish step and nothing ships.
+Replace `v0.1.1` with the tag created by `npm version`. Publishing the GitHub
+Release triggers the workflow, which checks that the tag matches
+`package.json`, runs the tests, and publishes to npm. You can also create the
+release in GitHub's UI; `.github/release_template.md` supplies the description
+template and `.github/release.yml` groups generated notes.
 
 ## What ships in the tarball
 
