@@ -15,9 +15,12 @@ export class CodexAdapter implements BackendAdapter {
   async run(request: RunRequest, callbacks: AdapterCallbacks) {
     const config = await loadConfig();
     const account = request.backend === 'codex-b' ? config.codexHomes.b : config.codexHomes.a;
+    const args = request.sessionId
+      ? ['exec', 'resume', '--json', '--skip-git-repo-check', request.sessionId, request.brief]
+      : ['exec', '--json', '--sandbox', 'workspace-write', '--skip-git-repo-check', '-C', request.cwd, request.brief];
     const { spec, wrapped } = await wrapSpawn({
       command: 'codex',
-      args: ['exec', '--json', '--sandbox', 'workspace-write', '--skip-git-repo-check', '-C', request.cwd, request.brief],
+      args,
       env: account ? { CODEX_HOME: account } : {},
     }, request.backend, config);
     const result = await runProcess(spec, request, callbacks);

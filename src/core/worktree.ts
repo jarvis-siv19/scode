@@ -26,6 +26,8 @@ export interface Worktree {
   path: string;
   /** True when this is a real git worktree (vs a cwd fallback). */
   isWorktree: boolean;
+  /** scode-seeded context files excluded from the agent-edit signal. */
+  ignoredPaths?: string[];
 }
 
 /**
@@ -57,6 +59,19 @@ export async function removeWorktree(worktree: Worktree, repoCwd: string): Promi
     if (exitCode === 0) return;
   }
   await rm(worktree.path, { recursive: true, force: true });
+}
+
+/** True when an agent changed tracked, staged, or untracked files. */
+export async function worktreeHasChanges(worktree: Worktree, ignoredPaths: string[] = []): Promise<boolean> {
+  if (!worktree.isWorktree) return false;
+  const { stdout, exitCode } = await execGit(['status', '--porcelain', '--untracked-files=all'], worktree.path);
+  if (exitCode !== 0) return false;
+  const ignored = new Set(ignoredPaths);
+  return stdout.split('\n').some((line) => {
+    if (!line.trim()) return false;
+    const path = line.slice(3).split(' -> ').at(-1) ?? '';
+    return !ignored.has(path);
+  });
 }
 
 /** Scratch dir for smoke tests and other throwaway work. */

@@ -12,8 +12,9 @@ import { appendLedger } from './ledger.js';
 import { formatBrief, installPromptPack } from './promptPack.js';
 import { backendSnapshots, markCoolingDown } from './quota.js';
 import { getSessionId, saveSessionId } from './sessions.js';
+import { saveRunRecord } from './runs.js';
 import type { BackendId, RunResult } from './types.js';
-import { createWorktree, removeWorktree, type Worktree } from './worktree.js';
+import { createWorktree, removeWorktree, worktreeHasChanges, type Worktree } from './worktree.js';
 
 function adapterFor(backend: BackendId): BackendAdapter {
   if (backend === 'codex-a' || backend === 'codex-b') return new CodexAdapter();
@@ -34,6 +35,9 @@ export interface DispatchOptions {
   classification: Record<string, unknown>;
   onStdout?: (chunk: string) => void;
   onStderr?: (chunk: string) => void;
+  onDisplay?: (text: string) => void;
+  /** Task creates an isolated coding worktree; chat continues in the repo. */
+  interactionMode?: 'task' | 'chat';
   dryRun?: boolean;
   /** Allow one fallback to another backend on a classified failure. */
   allowFallback?: boolean;
@@ -61,22 +65,24 @@ export async function dispatch(options: DispatchOptions): Promise<RunResult> {
   const config = await loadConfig();
   const taskId = options.taskId ?? randomUUID();
   const repoCwd = options.cwd ?? process.cwd();
+  const interactionMode = options.interactionMode ?? 'task';
   // Pre-dispatch indexing: build the code graph when it is missing or stale
   // (best-effort — a missing or failing graph never fails the job). Skipped
   // on dry runs and on fallback retries (the first attempt already ensured it).
   let graph: EnsureGraphResult | null = null;
   const graphEnabled = config.graphify?.enabled !== false && (config.graphify?.autoBuild ?? true);
-  if (graphEnabled && !options.dryRun && !options.reuseWorktree) {
+  if (interactionMode === 'task' && graphEnabled && !options.dryRun && !options.reuseWorktree) {
     graph = await ensureGraph(repoCwd);
     if (graph.action === 'built' || graph.action === 'failed') {
       console.log(`[scode] code graph: ${graph.detail}`);
     }
   }
-  const worktree: Worktree = options.reuseWorktree ?? (options.dryRun
+  const worktree: Worktree = options.reuseWorktree ?? (options.dryRun || interactionMode === 'chat'
     ? { path: repoCwd, isWorktree: false }
     : await createWorktree(taskId, repoCwd));
   if (worktree.isWorktree && !options.reuseWorktree) {
     const pack = await installPromptPack(worktree.path);
+    worktree.ignoredPaths = pack.installed;
     if (pack.installed.length > 0) {
       console.log(`[scode] prompt pack seeded into worktree: ${pack.installed.join(', ')}`);
     }
@@ -85,7 +91,7 @@ export async function dispatch(options: DispatchOptions): Promise<RunResult> {
 
   const request = {
     taskId,
-    brief: formatBrief(options.brief),
+    brief: interactionMode === 'chat' ? options.brief : formatBrief(options.brief),
     backend: options.backend,
     cwd: worktree.path,
     timeoutMs: options.timeoutMs ?? config.defaultTimeoutMs,
@@ -106,17 +112,18 @@ export async function dispatch(options: DispatchOptions): Promise<RunResult> {
     sessionResumed: !!sessionId,
     classification: options.classification,
     selectionReason: options.selectionReason,
+    interactionMode,
     ...(options.scheduleId ? { scheduleId: options.scheduleId } : {}),
     // Graph state at dispatch time, so `scode learn` can later compare
     // graph-vs-no-graph token use. Absent when the graph check was skipped.
     ...(graph ? { graphPresent: graph.status.present, graphBuiltAtCommit: graph.status.builtAtCommit, graphAction: graph.action } : {}),
   });
-
   let result: RunResult;
   try {
     result = await adapterFor(request.backend).run(request, {
       onStdout: options.onStdout ?? ((chunk) => process.stdout.write(chunk)),
       onStderr: options.onStderr ?? ((chunk) => process.stderr.write(chunk)),
+      onDisplay: options.onDisplay,
     });
   } catch (error) {
     await appendLedger({
@@ -131,7 +138,8 @@ export async function dispatch(options: DispatchOptions): Promise<RunResult> {
     throw error;
   }
 
-  result = { ...result, worktree: worktree.path };
+  const hasChanges = await worktreeHasChanges(worktree, worktree.ignoredPaths);
+  result = { ...result, worktree: worktree.path, hasChanges };
   if (result.sessionId) await saveSessionId(taskId, request.backend, result.sessionId);
   await appendLedger({
     event: 'run-finished',
@@ -139,11 +147,18 @@ export async function dispatch(options: DispatchOptions): Promise<RunResult> {
     ...(options.scheduleId ? { scheduleId: options.scheduleId } : {}),
   });
 
-  // Success: clean up the worktree. Failure: keep it for inspection/resume.
+  // Preserve successful edits so users can inspect, continue, or apply them.
+  // A clean successful worktree is disposable and is removed automatically.
   if (result.success) {
-    if (worktree.isWorktree) await removeWorktree(worktree, repoCwd);
+    if (worktree.isWorktree && !hasChanges) {
+      await removeWorktree(worktree, repoCwd);
+      result = { ...result, worktree: undefined };
+    }
+    await saveRunRecord(options.brief, repoCwd, result);
     return result;
   }
+
+  await saveRunRecord(options.brief, repoCwd, result);
 
   if (!options.allowFallback || !result.errorClass || options.signal?.aborted) return result;
 

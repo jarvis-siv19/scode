@@ -21,6 +21,7 @@ export class CopilotAdapter implements BackendAdapter {
   async run(request: RunRequest, callbacks: AdapterCallbacks) {
     const config = await loadConfig();
     const args = ['-p', request.brief, '--output-format', 'json', '--allow-tool', 'write'];
+    if (request.sessionId) args.push(`--resume=${request.sessionId}`);
     if (config.copilotMaxContinues !== undefined) {
       args.push('--max-autopilot-continues', String(config.copilotMaxContinues));
     }

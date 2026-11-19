@@ -1,15 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
-import { loadConfig } from '../config.js';
+import { loadConfig, setBackendProfile, setCodexHome, setOpenCodeModel } from '../config.js';
 import { dispatch } from '../core/dispatcher.js';
 import { readLedgerTail } from '../core/ledger.js';
 import { backendSnapshots, setManualQuota } from '../core/quota.js';
 import { routeTask } from '../core/router.js';
 import { loadSchedules, runDueSchedules } from '../core/schedules.js';
 import { getPriors } from '../core/scoring.js';
+import { attachRun } from '../core/runs.js';
 import { computeTokenStats, type TokenStats } from '../core/tokenStats.js';
 import { BACKEND_IDS, type BackendId, type BackendSnapshot, type ThemeId } from '../core/types.js';
 import { BackendsPane } from './BackendsPane.js';
+import { BackendEditor, type BackendEdit } from './BackendEditor.js';
 import { JobsPane, MAX_VISIBLE_JOBS, type JobView, type ScheduleView } from './JobsPane.js';
 import { ManualEntry } from './ManualEntry.js';
 import { hitTestTuiClick, parseSgrMouseClick } from './mouse.js';
@@ -17,7 +19,7 @@ import { TaskBar } from './TaskBar.js';
 import { TokensDashboard } from './TokensDashboard.js';
 import { THEMES, THEME_ORDER } from './theme.js';
 
-type Mode = 'task' | 'manual' | 'help' | 'tokens';
+type Mode = 'task' | 'manual' | 'backend' | 'help' | 'tokens';
 type Focus = 'task' | 'backends' | 'jobs';
 
 /** Override cycle: auto, then each backend in order. */
@@ -26,6 +28,7 @@ export const OVERRIDE_OPTIONS: Array<BackendId | undefined> = [undefined, ...BAC
 export function App() {
   const { exit } = useApp();
   const [mode, setMode] = useState<Mode>('task');
+  const [interactionMode, setInteractionMode] = useState<'task' | 'chat'>('task');
   const [task, setTask] = useState('');
   const [backends, setBackends] = useState<BackendSnapshot[]>([]);
   const [jobs, setJobs] = useState<JobView[]>([]);
@@ -49,6 +52,7 @@ export function App() {
   ));
   const visibleJobs = orderedJobs.slice(startIndex, startIndex + MAX_VISIBLE_JOBS);
   const selectedJob = orderedJobs.find((job) => job.id === selectedJobId);
+  const selectedBackend = override ? backends.find((backend) => backend.id === override) : undefined;
   const running = jobs.some((job) => job.state === 'running' || job.state === 'stopping');
   const showJobs = jobs.length > 0 || schedules.length > 0;
   // Refs so the 60s tick timer sees live state instead of a stale closure.
@@ -147,9 +151,9 @@ export function App() {
    */
   const handleTaskChange = (value: string) => {
     if (value.includes('[<')) return;
-    const shortcuts = ['m', 'r', 't', '?', 'q'];
-    if (focus === 'jobs') shortcuts.push('s', 'c');
-    if (focus === 'backends') shortcuts.push('a');
+    const shortcuts = ['m', 'r', 't', 'x', '?', 'q'];
+    if (focus === 'jobs') shortcuts.push('s', 'c', 'o');
+    if (focus === 'backends') shortcuts.push('a', 'e', 'f');
     setTask((prev) => (prev === '' && value.length === 1 && shortcuts.includes(value) ? prev : value));
   };
 
@@ -236,10 +240,35 @@ export function App() {
     if (input === 'r' && task.length === 0) void refresh(true);
     if (input === 'm' && task.length === 0) setMode('manual');
     if (input === 't' && task.length === 0) setMode('tokens');
+    if (input === 'x' && task.length === 0) {
+      setInteractionMode((current) => current === 'task' ? 'chat' : 'task');
+      setFocus('task');
+    }
     if (input === '?' && task.length === 0) setMode('help');
     if (input === 's' && task.length === 0 && focus === 'jobs') stopSelectedJob();
     if (input === 'c' && task.length === 0 && focus === 'jobs') clearFinishedJobs();
+    if (input === 'o' && task.length === 0 && focus === 'jobs' && selectedJob && selectedJob.state !== 'running') {
+      const taskId = selectedJob.taskId ?? selectedJob.id;
+      setMessage(`Opening ${selectedJob.backend} session ${taskId}…`);
+      exit();
+      setTimeout(() => {
+        void attachRun(taskId).then((code) => { process.exitCode = code; }).catch((error: unknown) => {
+          console.error(`[scode] ${error instanceof Error ? error.message : String(error)}`);
+          process.exitCode = 1;
+        });
+      }, 50);
+    }
     if (input === 'a' && task.length === 0 && focus === 'backends') setOverrideIndex(0);
+    if (input === 'e' && task.length === 0 && focus === 'backends') {
+      if (selectedBackend) setMode('backend');
+      else setMessage('Select a backend before editing it.');
+    }
+    if (input === 'f' && task.length === 0 && focus === 'backends' && override === 'opencode') {
+      void setOpenCodeModel('free').then(() => {
+        setMessage('OpenCode now uses the free model: opencode/big-pickle.');
+        void refresh(false);
+      }).catch((error: unknown) => setMessage(error instanceof Error ? error.message : String(error)));
+    }
   }, { isActive: mode !== 'manual' });
 
   const appendOutput = (id: string, chunk: string) => {
@@ -251,7 +280,7 @@ export function App() {
   };
 
   const submit = async (brief: string) => {
-    if (!brief.trim() || running) return;
+    if (!brief.trim()) return;
     const priors = await getPriors();
     let classification;
     let selection;
@@ -262,10 +291,13 @@ export function App() {
       return;
     }
     const id = `${Date.now()}`;
+    const dispatchTaskId = interactionMode === 'chat'
+      ? `chat-${selection.backend}-${Buffer.from(process.cwd()).toString('base64url').slice(-12)}`
+      : id;
     const controller = new AbortController();
     controllersRef.current.set(id, controller);
     setJobs((current) => [{
-      id, brief, backend: selection.backend, state: 'running',
+      id, taskId: dispatchTaskId, brief, backend: selection.backend, state: 'running', interactionMode,
       startedAt: Date.now(), outputTail: [],
     }, ...current]);
     setSelectedJobId(id);
@@ -275,13 +307,16 @@ export function App() {
     try {
       const result = await dispatch({
         brief,
+        taskId: dispatchTaskId,
         backend: selection.backend,
         selectionReason: selection.reason,
         classification: { ...classification },
         allowFallback: true,
         signal: controller.signal,
-        onStdout: (chunk) => appendOutput(id, chunk),
-        onStderr: (chunk) => appendOutput(id, chunk),
+        interactionMode,
+        onStdout: () => {},
+        onStderr: () => {},
+        onDisplay: (text) => appendOutput(id, text),
       });
       setJobs((current) => current.map((job) => job.id === id
         ? {
@@ -292,6 +327,8 @@ export function App() {
           errorClass: result.errorClass,
           usage: result.usage,
           backend: result.backend,
+          worktree: result.worktree,
+          hasChanges: result.hasChanges,
         }
         : job));
       setMessage(result.success
@@ -315,6 +352,17 @@ export function App() {
     void refresh(false);
   };
 
+  const saveBackendEdit = async (backend: BackendSnapshot, edit: BackendEdit) => {
+    await setBackendProfile(backend.id, { label: edit.label, account: edit.account });
+    if (edit.extra && backend.id === 'opencode') await setOpenCodeModel(edit.extra);
+    if (edit.extra && (backend.id === 'codex-a' || backend.id === 'codex-b')) {
+      await setCodexHome(backend.id === 'codex-a' ? 'a' : 'b', edit.extra);
+    }
+    setMode('task');
+    setMessage(`Saved ${backend.id}. Login credentials remain managed by the vendor CLI.`);
+    await refresh(false);
+  };
+
   return (
     <Box
       flexDirection="column"
@@ -331,12 +379,18 @@ export function App() {
         <Box borderStyle="round" borderColor={theme.border} flexDirection="column" paddingX={1}>
           <Text bold color={theme.primary}>Controls</Text>
           <Text>Enter — dispatch the task · Tab — switch focus</Text>
+          <Text>x — switch between Task (isolated edits) and Chat (continued conversation)</Text>
           <Text>↑ ↓ — choose a backend or move through jobs</Text>
           <Text>Click a backend to pin it; click the Backends heading for auto-routing.</Text>
           <Text>Click a job to select it; click Stop or press s to cancel a running job.</Text>
           <Text>Click Clear completed or press c to clear finished jobs.</Text>
+          <Text>o — leave scode and continue the selected job in the vendor's native terminal UI</Text>
           <Text>r — refresh quota probes</Text>
           <Text>m — manual quota entry (when the task bar is empty)</Text>
+          <Text>e — edit the selected backend name, account hint, model, or Codex home</Text>
+          <Text>f — set selected OpenCode backend to its free model</Text>
+          <Text>Account labels — `scode backend set ID --label NAME --account EMAIL`</Text>
+          <Text>Native session — `scode session attach TASK_ID`</Text>
           <Text>t — token usage dashboard (when the task bar is empty)</Text>
           <Text>Theme — run `scode theme set {THEME_ORDER.join('|')}`; restart to apply</Text>
           <Text>? — this help</Text>
@@ -345,17 +399,25 @@ export function App() {
         </Box>
       ) : mode === 'manual' ? (
         <ManualEntry theme={theme} backends={backends} onSave={(backend, remaining, reset) => void saveManual(backend, remaining, reset)} onCancel={() => setMode('task')} />
+      ) : mode === 'backend' && selectedBackend ? (
+        <BackendEditor
+          backend={selectedBackend}
+          theme={theme}
+          onSave={(edit) => void saveBackendEdit(selectedBackend, edit).catch((error: unknown) => setMessage(error instanceof Error ? error.message : String(error)))}
+          onCancel={() => setMode('task')}
+        />
       ) : (
         <TaskBar
           theme={theme}
           value={task}
           onChange={handleTaskChange}
           onSubmit={(value) => void submit(value)}
-          disabled={running || focus !== 'task'}
+          disabled={focus !== 'task'}
           overrideLabel={override ? `backend: ${override}` : 'backend: auto'}
+          interactionMode={interactionMode}
         />
       )}
-      {mode !== 'tokens' && (
+      {mode !== 'tokens' && mode !== 'backend' && (
         <Box>
           <BackendsPane backends={backends} theme={theme} wide={!showJobs} selectedBackend={override} />
           {showJobs && (
@@ -373,7 +435,7 @@ export function App() {
         </Box>
       )}
       <Text dimColor>{message}</Text>
-      {mode === 'task' && <Text dimColor>Tab focus · click rows · ↑↓ select · s stop · c clear · r refresh · ? help · q quit</Text>}
+      {mode === 'task' && <Text dimColor>{interactionMode.toUpperCase()} · x mode · Tab focus · e edit · o continue · f free · r refresh · ? help</Text>}
     </Box>
   );
 }

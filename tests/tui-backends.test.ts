@@ -22,20 +22,22 @@ function backend(overrides: Partial<BackendSnapshot> & Pick<BackendSnapshot, 'id
   };
 }
 
-test('backends pane distinguishes non-window limit modes and shows auth providers', () => {
+test('backends pane separates login, usage, reset, and provider columns', () => {
   const output = renderToString(React.createElement(BackendsPane, {
     backends: [
-      backend({ id: 'codex-b', status: 'unavailable', note: 'no CODEX_HOME configured (JCODE_CODEX_B_HOME)' }),
-      backend({ id: 'agy', quotaMode: 'reactive', authProvider: 'Google OAuth / GCP' }),
-      backend({ id: 'opencode', quotaMode: 'provider', authProvider: 'Bedrock + GitHub Copilot + NVIDIA' }),
-      backend({ id: 'claude', quotaMode: 'provider', authProvider: 'Amazon Bedrock' }),
+      backend({ id: 'codex-b', displayName: 'Codex school', loginStatus: 'setup', status: 'unavailable', note: 'no CODEX_HOME configured (JCODE_CODEX_B_HOME)' }),
+      backend({ id: 'agy', displayName: 'Antigravity', loginStatus: 'active', quotaMode: 'reactive', authProvider: 'Google OAuth / GCP' }),
+      backend({ id: 'opencode', displayName: 'OpenCode', loginStatus: 'active', model: 'opencode/big-pickle', quotaMode: 'provider', authProvider: 'OpenCode free' }),
+      backend({ id: 'claude', displayName: 'Claude', loginStatus: 'active', quotaMode: 'provider', authProvider: 'Amazon Bedrock' }),
     ],
     theme: THEMES.ember,
     wide: true,
   }));
-  assert.match(output, /codex-b\s+NO HOME/);
-  assert.match(output, /agy\s+REACTIVE.*Google OAuth \/ GCP/);
-  assert.match(output, /opencode\s+BYO.*Bedrock\+GitHub Copilot\+NVIDIA/);
-  assert.match(output, /claude\s+METERED.*Amazon Bedrock/);
+  assert.match(output, /Name\s+Login\s+Usage\s+Resets/);
+  assert.match(output, /Codex school\s+○ setup/);
+  assert.match(output, /Antigravity\s+● active.*on run.*Google OAuth \/ GCP/);
+  assert.match(output, /OpenCode\s+● active.*free.*OpenCode free/);
+  assert.match(output, /Claude\s+● active.*provider.*Amazon Bedrock/);
+  assert.match(output, /Upcoming · Cursor CLI · Bivia coordinated teams/);
   assert.doesNotMatch(output, /UNKNOWN/);
 });

@@ -106,6 +106,8 @@ they only use npm's temporary download cache.
 ```sh
 scode run "review this change"
 scode status
+scode session list
+scode backend list
 scode doctor --quick
 scode theme set ember
 ```
@@ -113,19 +115,49 @@ scode theme set ember
 Running `scode` opens the interactive terminal UI. Choose from Ember
 (red/black), Classic, Aurora, or Violet with `scode theme set <name>`.
 In the TUI, click to pin a backend or select a job; stop a running job with
-the Stop action or `s`. Tab and arrow keys work without a mouse.
+the Stop action or `s`. Tab and arrow keys work without a mouse. Press `x` to
+switch between Task mode (isolated coding worktrees) and Chat mode (a continued
+conversation in the current repo). You can dispatch more tasks while agents
+are already running. Press `o` on a completed job to leave scode and continue
+inside the vendor's unmodified interactive CLI.
 
-Backend rows also show the detected authentication provider without exposing
-account names or credentials. A percentage is shown when the vendor exposes a
-quota window. `REACTIVE` means scode watches run-time limit responses, `BYO`
-means OpenCode uses the selected provider's quota, and `METERED` means usage is
-billed by the configured provider (for example, Claude through Amazon Bedrock).
+Backend rows separate login state, usage, reset time, and provider. Codex reset
+windows remain visible; Kiro is identified as a calendar-month allowance. Add
+your own local label or account hint (an email or handle is fine) without
+changing any vendor credential:
+
+```sh
+scode backend set codex-a --label "Codex personal" --account me@example.com
+scode backend set codex-b --label "Codex school" --account me@school.edu --home ~/.codex-school
+CODEX_HOME="$HOME/.codex-school" codex login
+```
+
+The second Codex account must have a distinct `CODEX_HOME`; otherwise scode
+marks it as setup required rather than silently counting the first account
+twice. scode stores only the path and display hint, never the vendor login
+token.
+
+OpenCode's free preset can be selected from the TUI by choosing OpenCode and
+pressing `f`, or from the CLI:
+
+```sh
+scode backend set opencode --model free
+```
+
+Successful task worktrees with edits are preserved. List and resume them with:
+
+```sh
+scode session list
+scode session attach <task-id>
+```
 
 ## Features
 
 - Routes tasks across supported coding-agent CLIs based on task and quota.
 - Uses Bivia for task classification and backend selection when configured.
-- Runs each task in its own Git worktree.
+- Runs concurrent tasks in separate Git worktrees and preserves completed edits.
+- Extracts readable assistant replies from vendor JSON streams.
+- Resumes jobs in each vendor's native interactive terminal UI.
 - Tracks runs and token usage in a local ledger.
 - Supports scheduled jobs and MCP tools.
 

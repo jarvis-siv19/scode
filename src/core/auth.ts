@@ -145,6 +145,10 @@ export async function detectBackendAuth(id: BackendId, config: JcodeConfig): Pro
       return hasSession || hasConfig ? 'GitHub OAuth' : null;
     }
     case 'opencode':
+      if (config.opencodeModel.startsWith('opencode/')) return 'OpenCode free';
+      if (config.opencodeModel.startsWith('amazon-bedrock/')) return 'Amazon Bedrock';
+      if (config.opencodeModel.startsWith('github-copilot/')) return 'GitHub Copilot';
+      if (config.opencodeModel.startsWith('nvidia/')) return 'NVIDIA';
       return parseOpenCodeProviders(await readJson(join(homedir(), '.local', 'share', 'opencode', 'auth.json')));
     case 'claude': return detectClaudeAuth();
     default: return null;

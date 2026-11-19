@@ -13,21 +13,19 @@ function resetLabel(resetsAt: string | null): string {
   return hours > 0 ? `${hours}h${minutes > 0 ? `${minutes}m` : ''}` : `${Math.max(1, minutes)}m`;
 }
 
-function stateLabel(backend: BackendSnapshot): string {
-  if (backend.status === 'disabled') return 'off';
-  if (backend.quota.remainingFraction === 0) return 'limit reached';
-  if (backend.status === 'cooling-down') return `cool ${resetLabel(backend.quota.coolingUntil ?? null)}`.trim();
-  if (backend.status === 'unavailable') return '';
-  return backend.quota.remainingFraction === null && backend.quotaMode === 'unknown' ? 'quota unknown' : '';
+function usageLabel(backend: BackendSnapshot, used: number | null): string {
+  if (backend.status === 'disabled') return '—';
+  if (used !== null) return `${Math.round(used * 100)}% used`;
+  if (backend.id === 'opencode' && backend.model.startsWith('opencode/')) return 'free';
+  if (backend.quotaMode === 'provider') return 'provider';
+  return 'on run';
 }
 
-function usageLabel(backend: BackendSnapshot, used: number | null): string {
-  if (backend.status === 'disabled') return 'OFF';
-  if (backend.status === 'unavailable') return backend.note?.includes('CODEX_HOME') ? 'NO HOME' : 'MISSING';
-  if (used !== null) return `${Math.round(used * 100)}% used`;
-  if (backend.quotaMode === 'reactive') return 'REACTIVE';
-  if (backend.quotaMode === 'provider') return backend.id === 'opencode' ? 'BYO' : 'METERED';
-  return 'UNKNOWN';
+function loginLabel(backend: BackendSnapshot): string {
+  if (backend.loginStatus === 'active') return '● active';
+  if (backend.loginStatus === 'disabled') return '○ disabled';
+  if (backend.loginStatus === 'setup') return '○ setup';
+  return '○ logged out';
 }
 
 export function BackendsPane({ backends, theme, wide = false, selectedBackend }: {
@@ -36,31 +34,44 @@ export function BackendsPane({ backends, theme, wide = false, selectedBackend }:
   wide?: boolean;
   selectedBackend?: BackendId;
 }) {
+  const compact = !wide;
   return (
     <Box borderStyle="round" borderColor={theme.border} flexDirection="column" paddingX={1} width={wide ? '100%' : '50%'}>
-      <Text bold color={theme.primary}>Backends <Text dimColor>· click title for auto</Text></Text>
+      <Text bold color={theme.primary}>Backends <Text dimColor>· login and usage are separate</Text></Text>
+      <Text dimColor>{compact
+        ? `  ${'Name'.padEnd(13)} ${'Login'.padEnd(8)} Usage / reset`
+        : `  ${'Name'.padEnd(16)} ${'Login'.padEnd(12)} ${'Usage'.padEnd(9)} ${'Resets'.padEnd(8)} Via / account`}</Text>
       {backends.map((backend) => {
         const used = backend.quota.remainingFraction === null ? null : 1 - backend.quota.remainingFraction;
         const remaining = usageLabel(backend, used);
-        const filled = used === null ? 0 : Math.round(used * 6);
-        const bar = `${'█'.repeat(filled)}${'░'.repeat(6 - filled)}`;
         const color = backend.status === 'disabled' ? theme.disabled
           : backend.status === 'available' ? theme.success
             : backend.status === 'cooling-down' ? theme.cooling : theme.warning;
         const reset = resetLabel(backend.quota.resetsAt);
-        const state = stateLabel(backend);
-        const auth = backend.authProvider?.replaceAll(' + ', '+');
+        const context = backend.id === 'kiro' ? 'monthly'
+          : backend.status === 'disabled' ? backend.note : undefined;
+        const auth = [backend.authProvider, backend.accountLabel, context].filter(Boolean).join(' · ');
+        const name = backend.displayName ?? backend.id;
         const selected = selectedBackend === backend.id;
         return (
-          <Box key={backend.id}>
-            <Text color={selected ? theme.accent : color}>
-              {selected ? '› ' : '  '}{backend.id.padEnd(9)} {remaining.padStart(8)}
-              <Text color={theme.quota}> {bar}</Text>
-              <Text dimColor>{reset ? ` ${reset}` : ''}{state ? ` · ${state}` : ''}{auth ? ` · ${auth}` : ''}{backend.quota.source === 'manual' ? ' · manual' : ''}</Text>
-            </Text>
+          <Box key={backend.id} flexDirection="column">
+            {compact ? (
+              <>
+                <Text color={selected ? theme.accent : color}>
+                  {selected ? '› ' : '  '}{name.slice(0, 13).padEnd(13)} {loginLabel(backend).replace('● ', '').replace('○ ', '').slice(0, 8).padEnd(8)} {remaining} / {reset || '—'}
+                </Text>
+                <Text dimColor>    {(auth || backend.note || '—').slice(0, Math.max(12, Math.floor((process.stdout.columns || 80) / 2) - 8))}</Text>
+              </>
+            ) : (
+              <Text color={selected ? theme.accent : color}>
+                {selected ? '› ' : '  '}{name.slice(0, 16).padEnd(16)} {loginLabel(backend).padEnd(12)} {remaining.padEnd(9)} {(reset || '—').padEnd(8)}
+                <Text dimColor>{(auth || backend.note || '—').slice(0, 25)}{backend.quota.source === 'manual' ? ' · manual' : ''}</Text>
+              </Text>
+            )}
           </Box>
         );
       })}
+      <Text dimColor>  Upcoming · Cursor CLI · Bivia coordinated teams</Text>
     </Box>
   );
 }

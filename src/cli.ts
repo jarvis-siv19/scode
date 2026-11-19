@@ -16,17 +16,21 @@ import {
   validateCron,
 } from './core/schedules.js';
 import { getPriors } from './core/scoring.js';
-import { BACKEND_IDS, THEME_IDS, type BackendId, type ThemeId } from './core/types.js';
-import { loadConfig, setTheme } from './config.js';
+import { BACKEND_IDS, THEME_IDS, type BackendId, type BackendSnapshot, type ThemeId } from './core/types.js';
+import { loadConfig, setBackendProfile, setCodexHome, setOpenCodeModel, setTheme } from './config.js';
 import { THEMES } from './tui/theme.js';
 import { runDoctor } from './doctor.js';
 import { runLearn } from './core/learn.js';
 import { installForBackend, toolsStatus } from './mcp/install.js';
+import { attachRun, listRunRecords } from './core/runs.js';
+import { section, table, ui } from './format.js';
 
 export type Command =
   | { name: 'tui' }
   | { name: 'run'; brief: string; backend?: BackendId; cwd?: string; dryRun?: boolean }
   | { name: 'status' }
+  | { name: 'session'; action: 'list' | 'attach'; id?: string }
+  | { name: 'backend'; action: 'list' | 'set'; backend?: BackendId; label?: string; account?: string; model?: string; home?: string }
   | { name: 'doctor'; quick?: boolean; full?: boolean }
   | { name: 'learn' }
   | { name: 'tokens' }
@@ -60,6 +64,12 @@ export function parseArgs(argv: string[]): Command {
   const [name, ...rest] = argv;
   if (name === '--help' || name === '-h' || name === 'help') return { name: 'help' };
   if (name === 'status') return { name: 'status' };
+  if (name === 'session') {
+    if (rest.length === 0 || rest[0] === 'list') return { name: 'session', action: 'list' };
+    if (rest[0] === 'attach' && rest[1]) return { name: 'session', action: 'attach', id: rest[1] };
+    throw new Error('Usage: scode session [list | attach <task-id>]');
+  }
+  if (name === 'backend') return parseBackendArgs(rest);
   if (name === 'learn') return { name: 'learn' };
   if (name === 'tokens') return { name: 'tokens' };
   if (name === 'theme') {
@@ -109,6 +119,53 @@ export function parseArgs(argv: string[]): Command {
   const brief = briefParts.join(' ').trim();
   if (!brief) throw new Error('scode run requires a task brief');
   return { name: 'run', brief, backend, cwd, dryRun };
+}
+
+function parseBackendArgs(rest: string[]): Extract<Command, { name: 'backend' }> {
+  if (rest.length === 0 || rest[0] === 'list') return { name: 'backend', action: 'list' };
+  if (rest[0] !== 'set' || !rest[1] || !isBackend(rest[1])) {
+    throw new Error(`Usage: scode backend set <${BACKEND_IDS.join('|')}> [--label NAME] [--account HINT] [--model MODEL|free] [--home PATH]`);
+  }
+  const command: Extract<Command, { name: 'backend' }> = { name: 'backend', action: 'set', backend: rest[1] };
+  for (let index = 2; index < rest.length; index += 2) {
+    const flag = rest[index];
+    const value = rest[index + 1];
+    if (!value) throw new Error(`${flag} requires a value`);
+    if (flag === '--label') command.label = value;
+    else if (flag === '--account') command.account = value;
+    else if (flag === '--model') command.model = value;
+    else if (flag === '--home') command.home = resolve(value);
+    else throw new Error(`Unknown backend setting: ${flag}`);
+  }
+  return command;
+}
+
+function relativeReset(value: string | null): string {
+  if (!value) return '—';
+  const ms = Date.parse(value) - Date.now();
+  if (!Number.isFinite(ms)) return '—';
+  if (ms <= 0) return 'now';
+  const minutes = Math.ceil(ms / 60_000);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours}h ${minutes % 60}m`;
+  return `${Math.ceil(hours / 24)}d`;
+}
+
+function snapshotRow(item: BackendSnapshot): string[] {
+  const used = item.quota.remainingFraction === null ? null : 1 - item.quota.remainingFraction;
+  const usage = item.status === 'disabled' ? '—'
+    : used !== null ? `${Math.round(used * 100)}% used`
+      : item.id === 'opencode' && item.model.startsWith('opencode/') ? 'free'
+        : item.quotaMode === 'provider' ? 'provider'
+          : 'on run';
+  const login = item.loginStatus === 'active' ? 'active'
+    : item.loginStatus === 'setup' ? 'setup'
+      : item.loginStatus === 'disabled' ? 'disabled' : 'logged out';
+  const context = item.id === 'kiro' ? 'monthly allowance'
+    : item.status === 'disabled' ? item.note : undefined;
+  const via = [item.authProvider, item.accountLabel, context].filter(Boolean).join(' · ') || item.note || '—';
+  return [item.displayName ?? item.id, login, usage, relativeReset(item.quota.resetsAt), via];
 }
 
 function parseGraphArgs(rest: string[]): Extract<Command, { name: 'graph' }> {
@@ -184,10 +241,16 @@ function parseScheduleArgs(rest: string[]): Extract<Command, { name: 'schedule' 
 export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): Promise<number> {
   if (command.name === 'help') {
     console.log([
-      'Usage:',
+      section('Command guide', 'route, run, and continue coding agents'),
+      '',
+      ui.accent('CORE'),
       '  scode                                    open the terminal UI',
       '  scode run [--backend ID] [--cwd PATH] [--dry-run] "<task>"',
       '  scode status                             per-backend headroom (runs probes)',
+      '  scode session [list|attach TASK_ID]      continue in the vendor\'s native terminal UI',
+      '  scode backend [list|set ...]             name accounts and configure backends',
+      '',
+      ui.accent('INSPECT & AUTOMATE'),
       '  scode doctor [--quick] [--full]          Phase 0 machine smoke tests',
       '  scode learn                              learning fold (Phase 5)',
       '  scode tokens                             token usage dashboard (today + last 7 days)',
@@ -199,8 +262,52 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
       '  scode schedule add "<task>" --in 2h       one-shot job, relative',
       '  scode schedule <list|remove|enable|disable|tick|install>',
       '',
-      `Backends: ${BACKEND_IDS.join(', ')}`,
+      '',
+      ui.dim(`Backends  ${BACKEND_IDS.join(' · ')}`),
+      ui.dim('Upcoming  Cursor CLI · Bivia coordinated teams'),
     ].join('\n'));
+    return 0;
+  }
+  if (command.name === 'session') {
+    if (command.action === 'attach') return attachRun(command.id as string);
+    const runs = await listRunRecords();
+    console.log(section('Sessions', 'native CLI conversations and preserved worktrees'));
+    if (runs.length === 0) {
+      console.log(ui.dim('No recorded sessions yet. Run a task first.'));
+      return 0;
+    }
+    console.log(table(['TASK ID', 'BACKEND', 'STATE', 'UPDATED', 'BRIEF'], runs.slice(0, 20).map((run) => [
+      run.taskId, run.backend, run.hasChanges ? 'changes' : run.success ? 'done' : 'failed',
+      new Date(run.updatedAt).toLocaleString(), run.brief.slice(0, 48),
+    ])).join('\n'));
+    console.log(ui.dim('\nContinue with: scode session attach <task-id>'));
+    return 0;
+  }
+  if (command.name === 'backend') {
+    if (command.action === 'set') {
+      const backend = command.backend as BackendId;
+      if (command.label !== undefined || command.account !== undefined) {
+        await setBackendProfile(backend, { label: command.label, account: command.account });
+      }
+      if (command.model !== undefined) {
+        if (backend !== 'opencode') throw new Error('--model is currently supported for opencode only');
+        await setOpenCodeModel(command.model);
+      }
+      if (command.home !== undefined) {
+        if (backend !== 'codex-a' && backend !== 'codex-b') throw new Error('--home is supported for codex-a/codex-b only');
+        await setCodexHome(backend === 'codex-a' ? 'a' : 'b', command.home);
+      }
+      console.log(`${ui.good('Saved')} ${backend}. Run ${ui.accent('scode status')} to verify login and usage.`);
+      if (command.home) console.log(ui.dim(`Login separately: CODEX_HOME=${JSON.stringify(command.home)} codex login`));
+      return 0;
+    }
+    const snapshots = await backendSnapshots();
+    console.log(section('Backend settings', 'labels and account hints are local-only'));
+    console.log(table(['ID', 'DISPLAY', 'ACCOUNT', 'MODEL'], snapshots.map((item) => [
+      item.id, item.displayName ?? item.id, item.accountLabel ?? '—', item.model,
+    ])).join('\n'));
+    console.log(ui.dim('\nExample: scode backend set codex-b --label "Codex school" --account me@school.edu --home ~/.codex-school'));
+    console.log(ui.dim('Free OpenCode: scode backend set opencode --model free'));
     return 0;
   }
   if (command.name === 'learn') {
@@ -360,27 +467,21 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
   // status runs probes (cached 5 min); run reuses cached state for speed.
   const snapshots = await backendSnapshots({ refresh: command.name === 'status' });
   if (command.name === 'status') {
-    for (const item of snapshots) {
-      const used = item.quota.remainingFraction === null ? null : 1 - item.quota.remainingFraction;
-      const usedLabel = item.status === 'disabled' ? 'off'
-        : item.status === 'unavailable' ? (item.note?.includes('CODEX_HOME') ? 'no-home' : 'missing')
-          : used === null
-            ? item.quotaMode === 'reactive' ? 'reactive'
-              : item.quotaMode === 'provider' ? (item.id === 'opencode' ? 'provider' : 'metered')
-                : 'unknown'
-            : `${Math.round(used * 100)}%`;
-      const reset = item.quota.resetsAt ?? (item.quotaMode === 'window' ? 'unknown' : 'n/a');
-      const version = item.cliVersion ? ` (${item.cliVersion})` : '';
-      const note = item.note ? ` — ${item.note}` : '';
-      const auth = item.authProvider ? ` auth=${item.authProvider}` : '';
-      console.log(`${item.id.padEnd(10)} ${item.status.padEnd(13)} usage=${usedLabel.padEnd(8)} reset=${reset} source=${item.quota.source}${auth}${version}${note}`);
-    }
+    console.log(section('Backend status', 'login, usage, and reset are separate signals'));
+    const lines = table(['BACKEND', 'LOGIN', 'USAGE', 'RESETS', 'VIA / ACCOUNT'], snapshots.map(snapshotRow));
+    console.log(lines.map((line, index) => {
+      if (index < 2) return line;
+      const login = snapshots[index - 2]?.loginStatus;
+      return login === 'active' ? ui.good(line) : login === 'logged-out' ? ui.bad(line) : ui.warn(line);
+    }).join('\n'));
+    console.log(ui.dim('\nUpcoming  Cursor CLI · Bivia coordinated teams'));
+    console.log(ui.dim('Edit      scode backend set <id> --label NAME --account HINT'));
     return 0;
   }
 
   const priors = await getPriors();
   const { classification, selection } = await routeTask(command.brief, snapshots, command.backend, { priors });
-  console.error(`[scode] ${selection.backend}: ${selection.reason}`);
+  console.error(`${ui.brand('scode')} ${ui.dim('→')} ${ui.accent(selection.backend)}  ${selection.reason}`);
   const result = await dispatch({
     brief: command.brief,
     backend: selection.backend,
@@ -389,6 +490,15 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
     allowFallback: true,
     selectionReason: selection.reason,
     classification: { ...classification },
+    onStdout: () => {},
+    onStderr: () => {},
+    onDisplay: (text) => console.log(text),
   });
+  if (!result.success) {
+    console.error(`${ui.bad('failed')} ${result.backend}: ${result.errorClass ?? 'unknown error'}${result.exitCode === null ? '' : ` (exit ${result.exitCode})`}`);
+  } else if (result.hasChanges && result.worktree) {
+    console.error(`${ui.good('edits preserved')} ${result.worktree}`);
+    console.error(ui.dim(`Continue interactively: scode session attach ${result.taskId}`));
+  }
   return result.success ? 0 : result.exitCode ?? 1;
 }

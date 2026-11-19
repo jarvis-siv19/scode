@@ -17,3 +17,19 @@ test('codex: allows dispatch outside a git repository', async () => {
   const dry = lines.find((line) => line.startsWith('[dry-run]')) ?? '';
   assert.match(dry, /codex exec --json --sandbox workspace-write --skip-git-repo-check -C \/tmp/);
 });
+
+test('codex: resumes the exact session for chat follow-ups', async () => {
+  const lines: string[] = [];
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => { lines.push(args.join(' ')); };
+  try {
+    await new CodexAdapter().run(
+      { taskId: 't', brief: 'continue', backend: 'codex-a', cwd: '/tmp', timeoutMs: 1000, dryRun: true, sessionId: 'session-123' },
+      {},
+    );
+  } finally {
+    console.log = originalLog;
+  }
+  const dry = lines.find((line) => line.startsWith('[dry-run]')) ?? '';
+  assert.match(dry, /codex exec resume --json --skip-git-repo-check session-123 continue/);
+});

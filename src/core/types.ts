@@ -36,6 +36,12 @@ export interface QuotaWindow {
 
 export interface BackendSnapshot {
   id: BackendId;
+  /** User-editable label shown in the TUI and formatted CLI output. */
+  displayName?: string;
+  /** Optional local-only account hint (email, handle, or mention). */
+  accountLabel?: string;
+  /** Authentication is independent from quota/usage. */
+  loginStatus?: 'active' | 'logged-out' | 'setup' | 'disabled';
   status: BackendStatus;
   model: string;
   quota: QuotaWindow;
@@ -97,6 +103,8 @@ export interface RunResult {
   stdoutTail?: string;
   /** Worktree the job ran in (kept on failure for inspection/resume). */
   worktree?: string;
+  /** True when the isolated worktree contains edits worth preserving. */
+  hasChanges?: boolean;
   /** What this run fell back from, if anything. */
   fellBackFrom?: { backend: BackendId; errorClass: ErrorClass; reason: string };
   /** True when the run went through the Caveman proxy (Phase 3). */

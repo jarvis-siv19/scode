@@ -1,7 +1,12 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { THEME_IDS, type ThemeId } from './core/types.js';
+import { THEME_IDS, type BackendId, type ThemeId } from './core/types.js';
+
+export interface BackendProfile {
+  label?: string;
+  account?: string;
+}
 
 export interface JcodeConfig {
   quotaFloor: number;
@@ -10,6 +15,8 @@ export interface JcodeConfig {
   theme: ThemeId;
   codexHomes: { a?: string; b?: string };
   opencodeModel: string;
+  /** Local display metadata only. Never used as a credential. */
+  backendProfiles?: Partial<Record<BackendId, BackendProfile>>;
   /** Attach to a warm `opencode serve` to avoid MCP cold-boot. */
   opencodeAttachUrl?: string;
   /** Cap Copilot autonomous steps per run (premium-request budget). */
@@ -59,6 +66,8 @@ export const statePaths = () => ({
   lessons: join(stateHome(), 'lessons.md'),
   /** Per-task session ids, keyed by task id then backend (handoff §5). */
   sessions: join(stateHome(), 'sessions.json'),
+  /** Resumable task metadata for `scode session list|attach`. */
+  runs: join(stateHome(), 'runs.json'),
   /** Last `scode doctor` result (Phase 0 gate record). */
   smoke: join(stateHome(), 'smoke.json'),
   /** Last `scode learn` report (Phase 5). */
@@ -118,6 +127,11 @@ export async function loadConfig(): Promise<JcodeConfig> {
 }
 
 export async function setTheme(theme: ThemeId): Promise<void> {
+  await updateConfig({ theme });
+}
+
+/** Atomically merge top-level config fields while preserving unknown settings. */
+export async function updateConfig(patch: Partial<JcodeConfig>): Promise<void> {
   await ensureStateHome();
   const { config } = statePaths();
   let current: Record<string, unknown> = {};
@@ -131,6 +145,30 @@ export async function setTheme(theme: ThemeId): Promise<void> {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
   const temporary = `${config}.${process.pid}.tmp`;
-  await writeFile(temporary, `${JSON.stringify({ ...current, theme }, null, 2)}\n`, { mode: 0o600 });
+  await writeFile(temporary, `${JSON.stringify({ ...current, ...patch }, null, 2)}\n`, { mode: 0o600 });
   await rename(temporary, config);
+}
+
+export async function setBackendProfile(id: BackendId, profile: BackendProfile): Promise<void> {
+  const config = await loadConfig();
+  await updateConfig({
+    backendProfiles: {
+      ...config.backendProfiles,
+      [id]: {
+        ...config.backendProfiles?.[id],
+        ...profile,
+      },
+    },
+  });
+}
+
+export async function setOpenCodeModel(model: string): Promise<void> {
+  const normalized = model === 'free' ? defaults.opencodeModel : model.trim();
+  if (!normalized) throw new Error('OpenCode model cannot be empty');
+  await updateConfig({ opencodeModel: normalized });
+}
+
+export async function setCodexHome(account: 'a' | 'b', path: string): Promise<void> {
+  const config = await loadConfig();
+  await updateConfig({ codexHomes: { ...config.codexHomes, [account]: resolve(path) } });
 }

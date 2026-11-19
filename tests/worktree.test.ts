@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process';
 import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createWorktree, gitRoot, removeWorktree } from '../dist/core/worktree.js';
+import { createWorktree, gitRoot, removeWorktree, worktreeHasChanges } from '../dist/core/worktree.js';
 
 function git(args: string[], cwd: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -27,6 +27,13 @@ test('worktree: creates an isolated worktree and removes it', async () => {
     const worktree = await createWorktree('test-task-1', repo);
     assert.equal(worktree.isWorktree, true);
     assert.equal((await readFile(join(worktree.path, 'a.txt'), 'utf8')).replace(/\r\n/g, '\n'), 'hello\n');
+    assert.equal(await worktreeHasChanges(worktree), false);
+    await mkdir(join(worktree.path, '.kiro', 'steering'), { recursive: true });
+    await writeFile(join(worktree.path, '.kiro', 'steering', 'scode.md'), 'seeded\n');
+    assert.equal(await worktreeHasChanges(worktree, ['.kiro/steering/scode.md']), false);
+    await writeFile(join(worktree.path, 'a.txt'), 'changed\n');
+    assert.equal(await worktreeHasChanges(worktree), true);
+    assert.equal(await worktreeHasChanges(worktree, ['a.txt', '.kiro/steering/scode.md']), false);
     await removeWorktree(worktree, repo);
     await assert.rejects(readFile(join(worktree.path, 'a.txt'), 'utf8'));
   } finally {

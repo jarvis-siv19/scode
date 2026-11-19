@@ -5,6 +5,7 @@ import type { TuiTheme } from './theme.js';
 
 export interface JobView {
   id: string;
+  taskId?: string;
   brief: string;
   backend: string;
   state: 'running' | 'stopping' | 'success' | 'failed' | 'cancelled';
@@ -14,6 +15,9 @@ export interface JobView {
   errorClass?: string | null;
   usage?: RunUsage;
   outputTail: string[];
+  interactionMode?: 'task' | 'chat';
+  worktree?: string;
+  hasChanges?: boolean;
 }
 
 export interface ScheduleView {
@@ -91,7 +95,11 @@ export function JobsPane({ jobs, schedules, now, theme, selectedJobId, totalJobs
         <Text dimColor>
           {selectedJob.errorClass ? `Error: ${selectedJob.errorClass}${selectedJob.exitCode !== null && selectedJob.exitCode !== undefined ? ` (exit ${selectedJob.exitCode})` : ''}` : ''}
           {formatUsage(selectedJob.usage)}
+          {selectedJob.hasChanges ? ' — edits preserved' : ''}
         </Text>
+      )}
+      {selectedJob?.hasChanges && selectedJob.worktree && (
+        <Text color={theme.accent}>Continue: scode session attach {selectedJob.taskId ?? selectedJob.id}</Text>
       )}
       {selectedJob && selectedJob.outputTail.length > 0 && (
         <Box flexDirection="column" marginTop={1}>

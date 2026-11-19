@@ -221,7 +221,7 @@ export async function dispatchScheduled(
   const priors = await getPriors();
   const { classification, selection } = await routeTask(schedule.brief, snapshots, schedule.backend, { priors });
   const stream = onOutput
-    ? { onStdout: onOutput, onStderr: onOutput }
+    ? { onStdout: () => {}, onStderr: () => {}, onDisplay: onOutput }
     : undefined;
   return dispatch({
     brief: schedule.brief,

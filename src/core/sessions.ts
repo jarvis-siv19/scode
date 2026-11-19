@@ -8,6 +8,7 @@ import { ensureStateHome, statePaths } from '../config.js';
 import type { BackendId } from './types.js';
 
 type SessionStore = Partial<Record<string, Partial<Record<BackendId, string>>>>;
+let sessionWriteQueue: Promise<void> = Promise.resolve();
 
 async function readSessions(): Promise<SessionStore> {
   try {
@@ -23,8 +24,11 @@ export async function getSessionId(taskId: string, backend: BackendId): Promise<
 }
 
 export async function saveSessionId(taskId: string, backend: BackendId, sessionId: string): Promise<void> {
-  await ensureStateHome();
-  const store = await readSessions();
-  store[taskId] = { ...store[taskId], [backend]: sessionId };
-  await writeFile(statePaths().sessions, `${JSON.stringify(store, null, 2)}\n`);
+  sessionWriteQueue = sessionWriteQueue.catch(() => undefined).then(async () => {
+    await ensureStateHome();
+    const store = await readSessions();
+    store[taskId] = { ...store[taskId], [backend]: sessionId };
+    await writeFile(statePaths().sessions, `${JSON.stringify(store, null, 2)}\n`);
+  });
+  return sessionWriteQueue;
 }

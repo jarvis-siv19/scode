@@ -63,7 +63,7 @@ export function classifyFailure(exitCode: number | null, tail: string, timedOut:
 /** Pull a session id out of parsed events (vendor key names differ). */
 export function extractSessionId(events: StreamEvent[]): string | undefined {
   for (const { raw } of events) {
-    for (const key of ['session_id', 'sessionId', 'thread_id', 'threadId', 'conversation_id', 'conversationId', 'resume_id']) {
+    for (const key of ['session_id', 'sessionId', 'sessionID', 'thread_id', 'threadId', 'conversation_id', 'conversationId', 'resume_id']) {
       const value = raw[key];
       if (typeof value === 'string' && value) return value;
     }
@@ -85,7 +85,8 @@ export function extractSessionId(events: StreamEvent[]): string | undefined {
 export function extractUsage(events: StreamEvent[]): RunUsage | undefined {
   let usage: RunUsage | undefined;
   for (const { raw } of events) {
-    const candidates = [raw, raw.usage, (raw.result as Record<string, unknown> | undefined)?.usage];
+    const part = raw.part as Record<string, unknown> | undefined;
+    const candidates = [raw, raw.usage, part?.tokens, (raw.result as Record<string, unknown> | undefined)?.usage];
     for (const candidate of candidates) {
       if (typeof candidate !== 'object' || candidate === null) continue;
       const u = candidate as Record<string, unknown>;
@@ -94,6 +95,8 @@ export function extractUsage(events: StreamEvent[]): RunUsage | undefined {
       if (typeof u.output_tokens === 'number') found.outputTokens = u.output_tokens;
       if (typeof u.inputTokens === 'number') found.inputTokens = u.inputTokens;
       if (typeof u.outputTokens === 'number') found.outputTokens = u.outputTokens;
+      if (typeof u.input === 'number') found.inputTokens = u.input;
+      if (typeof u.output === 'number') found.outputTokens = u.output;
       if (typeof u.total_cost_usd === 'number') found.totalCostUsd = u.total_cost_usd;
       if (typeof u.premiumRequests === 'number') found.premiumRequests = u.premiumRequests;
       if (typeof u.premium_requests === 'number') found.premiumRequests = u.premium_requests;
@@ -101,6 +104,40 @@ export function extractUsage(events: StreamEvent[]): RunUsage | undefined {
     }
   }
   return usage;
+}
+
+function textFromContent(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (!Array.isArray(value)) return undefined;
+  const parts = value.flatMap((item) => {
+    if (typeof item === 'string') return [item];
+    if (typeof item !== 'object' || item === null) return [];
+    const record = item as Record<string, unknown>;
+    return typeof record.text === 'string' ? [record.text] : [];
+  }).filter((part) => part.trim());
+  return parts.length > 0 ? parts.join('\n').trim() : undefined;
+}
+
+/** Extract only user-facing assistant prose, never JSON protocol/log events. */
+export function extractDisplayText(raw: Record<string, unknown>): string | undefined {
+  const item = typeof raw.item === 'object' && raw.item !== null ? raw.item as Record<string, unknown> : undefined;
+  if (item && ['agent_message', 'assistant_message', 'message'].includes(String(item.type ?? ''))) {
+    return textFromContent(item.text ?? item.content ?? item.message);
+  }
+  const part = typeof raw.part === 'object' && raw.part !== null ? raw.part as Record<string, unknown> : undefined;
+  if (part && ['text', 'assistant', 'message'].includes(String(part.type ?? ''))) {
+    return textFromContent(part.text ?? part.content);
+  }
+  const type = String(raw.type ?? '').toLowerCase();
+  if (['result', 'assistant', 'assistant_message', 'message', 'text'].includes(type)) {
+    const direct = textFromContent(raw.result ?? raw.text ?? raw.content ?? raw.message);
+    if (direct) return direct;
+  }
+  const message = typeof raw.message === 'object' && raw.message !== null ? raw.message as Record<string, unknown> : undefined;
+  if (message && String(message.role ?? '').toLowerCase() === 'assistant') {
+    return textFromContent(message.content ?? message.text);
+  }
+  return undefined;
 }
 
 export function runProcess(spec: SpawnSpec, request: RunRequest, callbacks: ProcessCallbacks): Promise<RunResult> {
@@ -192,6 +229,8 @@ export function runProcess(spec: SpawnSpec, request: RunRequest, callbacks: Proc
             const parsed = JSON.parse(line) as Record<string, unknown>;
             events.push({ raw: parsed });
             callbacks.onEvent?.({ raw: parsed });
+            const display = extractDisplayText(parsed);
+            if (display) callbacks.onDisplay?.(display);
           } catch {
             // Not JSON — plain output line, ignore for events.
           }
