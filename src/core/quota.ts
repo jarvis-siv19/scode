@@ -130,11 +130,14 @@ export async function backendSnapshots(options?: { refresh?: boolean }): Promise
     // codex-b without its own CODEX_HOME would silently use account A's login
     // and double-count one pool — treat it as unavailable, not available.
     const missingHome = id === 'codex-b' && !config.codexHomes.b;
+    const exhausted = quota.remainingFraction === 0 && id === 'kiro';
     const status = disabled ? 'disabled'
+      : exhausted ? 'cooling-down'
       : cooling ? 'cooling-down'
         : !info.present || missingHome ? 'unavailable'
           : 'available';
     const note = disabled ? 'Claude Pro not confirmed'
+      : exhausted ? 'monthly limit reached · renewal time unknown'
       : cooling ? `cooling down until ${quota.coolingUntil}`
         : !info.present ? `${BACKEND_BINARIES[id]} not installed`
           : missingHome ? 'no CODEX_HOME configured (JCODE_CODEX_B_HOME)'

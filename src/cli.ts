@@ -361,11 +361,12 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
   const snapshots = await backendSnapshots({ refresh: command.name === 'status' });
   if (command.name === 'status') {
     for (const item of snapshots) {
-      const remaining = item.quota.remainingFraction === null ? 'unknown' : `${Math.round(item.quota.remainingFraction * 100)}%`;
+      const used = item.quota.remainingFraction === null ? null : 1 - item.quota.remainingFraction;
+      const usedLabel = used === null ? 'unknown' : `${Math.round(used * 100)}%`;
       const reset = item.quota.resetsAt ?? 'unknown';
       const version = item.cliVersion ? ` (${item.cliVersion})` : '';
       const note = item.note ? ` — ${item.note}` : '';
-      console.log(`${item.id.padEnd(10)} ${item.status.padEnd(13)} remaining=${remaining.padEnd(8)} reset=${reset} source=${item.quota.source}${version}${note}`);
+      console.log(`${item.id.padEnd(10)} ${item.status.padEnd(13)} used=${usedLabel.padEnd(8)} reset=${reset} source=${item.quota.source}${version}${note}`);
     }
     return 0;
   }

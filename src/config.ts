@@ -94,7 +94,10 @@ export async function loadConfig(): Promise<JcodeConfig> {
     ...defaults,
     ...fromDisk,
     theme: isThemeId(fromDisk.theme) ? fromDisk.theme : defaults.theme,
-    claudeEnabled: process.env.JCODE_CLAUDE_ENABLED === 'true' && fromDisk.claudeEnabled === true,
+    claudeEnabled:
+      process.env.JCODE_CLAUDE_ENABLED === 'false'
+        ? false
+        : fromDisk.claudeEnabled === true,
     codexHomes: {
       ...defaults.codexHomes,
       ...fromDisk.codexHomes,

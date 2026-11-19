@@ -68,6 +68,12 @@ test('kiro probe: returns null when nothing parses', () => {
   assert.equal(parseKiroUsage('hello world, no numbers here'), null);
 });
 
+test('kiro probe: monthly limit reached is an honest zero quota', () => {
+  const parsed = parseKiroUsage("You've reached your monthly usage limit.");
+  assert.ok(parsed);
+  assert.equal(parsed.remainingFraction, 0);
+});
+
 test('claude probe: parses status-line rate_limits', () => {
   const parsed = parseClaudeRateLimits({
     rate_limits: {

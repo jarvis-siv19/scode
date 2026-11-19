@@ -230,14 +230,23 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<{ results:
     push({ id: 'copilot-version', label: 'copilot >= 1.0.28 (reliable JSONL)', status: 'skip', detail: 'copilot not installed' });
   }
 
-  // OpenCode v2 only.
+  // OpenCode packages have two separate CLI generations. Presence of the
+  // `run --format json` command is the compatibility requirement; a
+  // semver-only check can misclassify a working installed CLI.
   if (present.get('opencode')) {
-    const version = parseVersion(versions.get('opencode'));
+    const text = await new Promise<string>((resolve) => {
+      execFile('opencode', ['run', '--help'], { timeout: 10_000, windowsHide: true }, (_error, stdout, stderr) => {
+        resolve(`${stdout}${stderr}`);
+      });
+    });
+    const runCompatible = text.includes('--format') || text.includes('--model');
     push({
       id: 'opencode-version',
-      label: 'opencode v2',
-      status: version && version[0] >= 2 ? 'pass' : 'fail',
-      detail: versions.get('opencode') ?? 'version unknown',
+      label: 'opencode headless run command',
+      status: runCompatible ? 'pass' : 'fail',
+      detail: runCompatible
+        ? `${versions.get('opencode') ?? 'version unknown'} supports run --format`
+        : 'opencode run --format interface was not found',
     });
   } else {
     push({ id: 'opencode-version', label: 'opencode v2', status: 'skip', detail: 'opencode not installed' });

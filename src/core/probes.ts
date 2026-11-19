@@ -210,6 +210,19 @@ export async function probeCodex(config: JcodeConfig, account: 'a' | 'b'): Promi
 
 export function parseKiroUsage(output: string): QuotaWindow | null {
   const text = output.replace(/\u001b\[[0-9;]*m/g, ''); // strip ANSI
+  if (/monthly usage limit|usage limit reached|reached your monthly/i.test(text)) {
+    const renewalMatch = text.match(/(?:renew(?:s|al)?|reset)[^\d]{0,20}(\d+)\s*(day|days|hour|hours|week|weeks)/i);
+    let resetsAt: string | null = null;
+    if (renewalMatch) {
+      const amount = Number(renewalMatch[1]);
+      const unit = renewalMatch[2].toLowerCase();
+      const multiplier = unit.startsWith('week') ? 7 * 86_400_000
+        : unit.startsWith('day') ? 86_400_000
+          : 3_600_000;
+      resetsAt = new Date(Date.now() + amount * multiplier).toISOString();
+    }
+    return windowFrom(0, resetsAt, null);
+  }
   // Look for "X% used" / "used: X%" / "remaining: Y%".
   const usedMatch = text.match(/used[^0-9]{0,12}(\d+(?:\.\d+)?)\s*%/i);
   const remainingMatch = text.match(/remain[^0-9]{0,12}(\d+(?:\.\d+)?)\s*%/i);
@@ -224,14 +237,16 @@ export function parseKiroUsage(output: string): QuotaWindow | null {
 }
 
 export async function probeKiro(): Promise<QuotaWindow | null> {
-  const { stdout, exitCode } = await runCapture(
+  const { stdout, stderr, exitCode } = await runCapture(
     'kiro-cli',
     ['chat', '--no-interactive', '/usage'],
     process.env,
     PROBE_TIMEOUT_MS,
   );
+  const parsed = parseKiroUsage(`${stdout}\n${stderr}`);
+  if (parsed) return parsed;
   if (exitCode !== 0) return null;
-  return parseKiroUsage(stdout);
+  return null;
 }
 
 // ─── agy: community reader against the undocumented local gRPC endpoint ─────

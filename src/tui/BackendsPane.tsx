@@ -15,6 +15,7 @@ function resetLabel(resetsAt: string | null): string {
 
 function stateLabel(backend: BackendSnapshot): string {
   if (backend.status === 'disabled') return 'off';
+  if (backend.quota.remainingFraction === 0) return 'limit reached';
   if (backend.status === 'cooling-down') return `cool ${resetLabel(backend.quota.coolingUntil ?? null)}`.trim();
   if (backend.status === 'unavailable') return backend.note?.includes('CODEX_HOME') ? 'no home' : 'missing';
   return backend.quota.remainingFraction === null ? 'unknown' : '';
@@ -30,8 +31,9 @@ export function BackendsPane({ backends, theme, wide = false, selectedBackend }:
     <Box borderStyle="round" borderColor={theme.border} flexDirection="column" paddingX={1} width={wide ? '100%' : '50%'}>
       <Text bold color={theme.primary}>Backends <Text dimColor>· click title for auto</Text></Text>
       {backends.map((backend) => {
-        const remaining = backend.quota.remainingFraction === null ? 'UNKNOWN' : `${Math.round(backend.quota.remainingFraction * 100)}%`;
-        const filled = backend.quota.remainingFraction === null ? 0 : Math.round(backend.quota.remainingFraction * 6);
+        const used = backend.quota.remainingFraction === null ? null : 1 - backend.quota.remainingFraction;
+        const remaining = used === null ? 'UNKNOWN' : `${Math.round(used * 100)}% used`;
+        const filled = used === null ? 0 : Math.round(used * 6);
         const bar = `${'█'.repeat(filled)}${'░'.repeat(6 - filled)}`;
         const color = backend.status === 'disabled' ? theme.disabled
           : backend.status === 'available' ? theme.success
