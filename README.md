@@ -127,10 +127,11 @@ The home screen shows compact token totals for today and the last seven days;
 press `t` for per-backend and daily detail. Cursor CLI and Bivia CLI are listed
 separately as upcoming integrations.
 
-Backend rows separate login state, usage, reset time, and provider. Codex reset
-windows remain visible; Kiro is identified as a calendar-month allowance. Add
-your own local label or account hint (an email or handle is fine) without
-changing any vendor credential:
+Backend rows separate login state, usage, reset time, and provider. Codex shows
+its 5-hour and weekly windows independently, with both a local reset date and a
+relative time; Kiro shows its calendar-month reset. Backends without a useful
+reset show `—`. Add your own local label or account hint (an email or handle is
+fine) without changing any vendor credential:
 
 ```sh
 scode backend set codex-a --label "Codex personal" --account me@example.com

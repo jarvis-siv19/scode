@@ -24,6 +24,7 @@ import { runLearn } from './core/learn.js';
 import { installForBackend, toolsStatus } from './mcp/install.js';
 import { attachRun, listRunRecords } from './core/runs.js';
 import { section, table, ui } from './format.js';
+import { displayQuotaWindows } from './core/quotaDisplay.js';
 
 export type Command =
   | { name: 'tui' }
@@ -140,19 +141,7 @@ function parseBackendArgs(rest: string[]): Extract<Command, { name: 'backend' }>
   return command;
 }
 
-function relativeReset(value: string | null): string {
-  if (!value) return '—';
-  const ms = Date.parse(value) - Date.now();
-  if (!Number.isFinite(ms)) return '—';
-  if (ms <= 0) return 'now';
-  const minutes = Math.ceil(ms / 60_000);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 48) return `${hours}h ${minutes % 60}m`;
-  return `${Math.ceil(hours / 24)}d`;
-}
-
-function snapshotRow(item: BackendSnapshot): string[] {
+function snapshotRows(item: BackendSnapshot): string[][] {
   const used = item.quota.remainingFraction === null ? null : 1 - item.quota.remainingFraction;
   const usage = item.status === 'disabled' ? '—'
     : used !== null ? `${Math.round(used * 100)}% used`
@@ -165,7 +154,15 @@ function snapshotRow(item: BackendSnapshot): string[] {
   const context = item.id === 'kiro' ? 'monthly allowance'
     : item.status === 'disabled' ? item.note : undefined;
   const via = [item.authProvider, item.accountLabel, context].filter(Boolean).join(' · ') || item.note || '—';
-  return [item.displayName ?? item.id, login, usage, relativeReset(item.quota.resetsAt), via];
+  const windows = displayQuotaWindows(item);
+  if (windows.length === 0) return [[item.displayName ?? item.id, login, usage, '—', via]];
+  return windows.map((window, index) => [
+    index === 0 ? item.displayName ?? item.id : '',
+    index === 0 ? login : '',
+    `${window.label} ${window.usage}`,
+    window.reset,
+    index === 0 ? via : '',
+  ]);
 }
 
 function parseGraphArgs(rest: string[]): Extract<Command, { name: 'graph' }> {
@@ -469,10 +466,11 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
   const snapshots = await backendSnapshots({ refresh: command.name === 'status' });
   if (command.name === 'status') {
     console.log(section('Backend status', 'login, usage, and reset are separate signals'));
-    const lines = table(['BACKEND', 'LOGIN', 'USAGE', 'RESETS', 'VIA / ACCOUNT'], snapshots.map(snapshotRow));
+    const statusRows = snapshots.flatMap((snapshot) => snapshotRows(snapshot).map((row) => ({ row, loginStatus: snapshot.loginStatus })));
+    const lines = table(['BACKEND', 'LOGIN', 'WINDOW / USAGE', 'RESETS', 'VIA / ACCOUNT'], statusRows.map(({ row }) => row));
     console.log(lines.map((line, index) => {
       if (index < 2) return line;
-      const login = snapshots[index - 2]?.loginStatus;
+      const login = statusRows[index - 2]?.loginStatus;
       return login === 'active' ? ui.good(line) : login === 'logged-out' ? ui.bad(line) : ui.warn(line);
     }).join('\n'));
     console.log(ui.dim('\nUpcoming  Cursor CLI'));
