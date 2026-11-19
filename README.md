@@ -13,7 +13,7 @@ API helps classify and route each task; otherwise scode uses local rules.
 Requires Node.js 22+ and at least one authenticated coding-agent CLI.
 
 ```sh
-npm install -g @sivab193/scode
+npm install -g --no-fund --no-audit @sivab193/scode
 scode
 ```
 
@@ -29,10 +29,12 @@ npx -y @sivab193/scode
 scode run "review this change"
 scode status
 scode doctor --quick
+scode theme set ember
 ```
 
 Running `scode` opens the interactive terminal UI. Use `jcode` as a
-compatibility alias.
+compatibility alias. Choose from Ember (red/black), Classic, Aurora, or Violet
+with `scode theme set <name>`.
 
 ## Features
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { RunUsage } from '../core/types.js';
+import type { TuiTheme } from './theme.js';
 
 export interface JobView {
   id: string;
@@ -52,16 +53,16 @@ function formatUsage(usage: RunUsage | undefined): string {
   return parts.length > 0 ? ` — ${parts.join(', ')}` : '';
 }
 
-export function JobsPane({ jobs, schedules, now }: { jobs: JobView[]; schedules?: ScheduleView[]; now: number }) {
+export function JobsPane({ jobs, schedules, now, theme }: { jobs: JobView[]; schedules?: ScheduleView[]; now: number; theme: TuiTheme }) {
   const ordered = [...jobs].sort((a, b) => Number(b.state === 'running') - Number(a.state === 'running'));
   const latest = ordered[0];
   const upcoming = (schedules ?? []).filter((item) => item.enabled && item.nextRunAt !== null);
   return (
-    <Box borderStyle="round" flexDirection="column" paddingX={1} width="50%">
-      <Text bold color="cyan">Jobs</Text>
+    <Box borderStyle="round" borderColor={theme.border} flexDirection="column" paddingX={1} width="50%">
+      <Text bold color={theme.primary}>Jobs</Text>
       {ordered.length === 0 ? <Text dimColor>No jobs yet</Text> : ordered.map((job) => (
         <Box key={job.id} flexDirection="column">
-          <Text color={job.state === 'failed' ? 'red' : job.state === 'success' ? 'green' : 'yellow'}>
+          <Text color={job.state === 'failed' ? theme.error : job.state === 'success' ? theme.success : theme.warning}>
             {job.state.padEnd(7)} {job.backend.padEnd(9)} {formatElapsed(job.startedAt, job.finishedAt, now).padStart(5)} {job.brief.slice(0, 30)}
           </Text>
           {(job.usage || job.errorClass) && (
@@ -81,7 +82,7 @@ export function JobsPane({ jobs, schedules, now }: { jobs: JobView[]; schedules?
       )}
       {upcoming.length > 0 && (
         <Box flexDirection="column" marginTop={1}>
-          <Text bold color="cyan">Scheduled</Text>
+          <Text bold color={theme.primary}>Scheduled</Text>
           {upcoming.map((item) => (
             <Text key={item.id} dimColor>
               {formatNextRun(item.nextRunAt, now).padEnd(9)} {item.backend.padEnd(9)} {item.brief.slice(0, 30)}

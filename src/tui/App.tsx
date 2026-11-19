@@ -1,18 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
+import { loadConfig } from '../config.js';
 import { dispatch } from '../core/dispatcher.js';
 import { readLedgerTail } from '../core/ledger.js';
 import { backendSnapshots, setManualQuota } from '../core/quota.js';
 import { routeTask } from '../core/router.js';
 import { loadSchedules, runDueSchedules } from '../core/schedules.js';
 import { getPriors } from '../core/scoring.js';
-import { computeTokenStats, formatTokens, type TokenStats } from '../core/tokenStats.js';
-import { BACKEND_IDS, type BackendId, type BackendSnapshot } from '../core/types.js';
+import { computeTokenStats, type TokenStats } from '../core/tokenStats.js';
+import { BACKEND_IDS, type BackendId, type BackendSnapshot, type ThemeId } from '../core/types.js';
 import { BackendsPane } from './BackendsPane.js';
 import { JobsPane, type JobView, type ScheduleView } from './JobsPane.js';
 import { ManualEntry } from './ManualEntry.js';
 import { TaskBar } from './TaskBar.js';
 import { TokensDashboard } from './TokensDashboard.js';
+import { THEMES, THEME_ORDER } from './theme.js';
 
 type Mode = 'task' | 'manual' | 'help' | 'tokens';
 
@@ -27,12 +29,15 @@ export function App() {
   const [jobs, setJobs] = useState<JobView[]>([]);
   const [schedules, setSchedules] = useState<ScheduleView[]>([]);
   const [tokenStats, setTokenStats] = useState<TokenStats | null>(null);
+  const [themeId, setThemeId] = useState<ThemeId>('ember');
   const [message, setMessage] = useState('Loading local backend state…');
   const [overrideIndex, setOverrideIndex] = useState(0);
   const [now, setNow] = useState(Date.now());
 
   const override = OVERRIDE_OPTIONS[overrideIndex];
+  const theme = THEMES[themeId];
   const running = jobs.some((job) => job.state === 'running');
+  const showJobs = jobs.length > 0 || schedules.some((schedule) => schedule.enabled && schedule.nextRunAt !== null);
   // Refs so the 60s tick timer sees live state instead of a stale closure.
   const runningRef = useRef(false);
   const tickingRef = useRef(false);
@@ -51,10 +56,15 @@ export function App() {
     const records = await readLedgerTail(2000);
     setTokenStats(computeTokenStats(records, new Date()));
     const known = snapshots.filter((item) => item.quota.source !== 'placeholder').length;
-    setMessage(`Backends refreshed: ${known}/${snapshots.length} with quota data. r refreshes · m manual entry · t tokens · ? help · q quits.`);
+    setMessage(`${known}/${snapshots.length} quotas · r refresh · m manual · t tokens · ? help · q quit`);
   };
 
   useEffect(() => { void refresh(true); }, []);
+  useEffect(() => {
+    void loadConfig()
+      .then((config) => setThemeId(config.theme))
+      .catch((error: unknown) => setMessage(error instanceof Error ? error.message : String(error)));
+  }, []);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
@@ -195,27 +205,35 @@ export function App() {
   };
 
   return (
-    <Box flexDirection="column">
-      <Text bold color="magenta">jcode</Text>
+    <Box
+      flexDirection="column"
+      width={process.stdout.columns || undefined}
+      minHeight={process.stdout.rows || undefined}
+      backgroundColor={theme.background}
+    >
+      <Box flexDirection="row">
+        <Text bold color={theme.primary}>scode</Text><Text dimColor> / </Text><Text color={theme.accent}>{theme.name}</Text>
+      </Box>
       {mode === 'tokens' ? (
-        <TokensDashboard stats={tokenStats ?? computeTokenStats([], new Date())} />
+        <TokensDashboard stats={tokenStats ?? computeTokenStats([], new Date())} theme={theme} />
       ) : mode === 'help' ? (
-        <Box borderStyle="round" flexDirection="column" paddingX={1}>
-          <Text bold color="cyan">Keys</Text>
+        <Box borderStyle="round" borderColor={theme.border} flexDirection="column" paddingX={1}>
+          <Text bold color={theme.primary}>Keys</Text>
           <Text>Enter — dispatch the task (auto-routed, or the ↑↓ override)</Text>
           <Text>↑ ↓ — cycle backend override (auto → codex-a → codex-b → …)</Text>
           <Text>r — refresh quota probes</Text>
           <Text>m — manual quota entry (when the task bar is empty)</Text>
           <Text>t — token usage dashboard (when the task bar is empty)</Text>
+          <Text>Theme — run `scode theme set {THEME_ORDER.join('|')}`; restart to apply</Text>
           <Text>? — this help</Text>
           <Text>q — quit (when the task bar is empty)</Text>
-          <Text dimColor>Scheduled jobs (jcode schedule add) fire here every minute while the TUI is open.</Text>
-          <Text dimColor>Press any key to close this help.</Text>
+          <Text dimColor>Any key closes help.</Text>
         </Box>
       ) : mode === 'manual' ? (
-        <ManualEntry backends={backends} onSave={(backend, remaining, reset) => void saveManual(backend, remaining, reset)} onCancel={() => setMode('task')} />
+        <ManualEntry theme={theme} backends={backends} onSave={(backend, remaining, reset) => void saveManual(backend, remaining, reset)} onCancel={() => setMode('task')} />
       ) : (
         <TaskBar
+          theme={theme}
           value={task}
           onChange={handleTaskChange}
           onSubmit={(value) => void submit(value)}
@@ -225,17 +243,11 @@ export function App() {
       )}
       {mode !== 'tokens' && (
         <Box>
-          <BackendsPane backends={backends} />
-          <JobsPane jobs={jobs} schedules={schedules} now={now} />
+          <BackendsPane backends={backends} theme={theme} wide={!showJobs} />
+          {showJobs && <JobsPane jobs={jobs} schedules={schedules} now={now} theme={theme} />}
         </Box>
       )}
       <Text dimColor>{message}</Text>
-      {tokenStats && (
-        <Text dimColor>
-          Tokens today: {formatTokens(tokenStats.today.total)} · Last 7 days: {formatTokens(tokenStats.week.total)}
-          {tokenStats.week.costUsd > 0 ? ` · $${tokenStats.week.costUsd.toFixed(2)} this week` : ''} · t for the dashboard
-        </Text>
-      )}
     </Box>
   );
 }

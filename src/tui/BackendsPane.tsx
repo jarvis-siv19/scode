@@ -1,34 +1,45 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { BackendSnapshot } from '../core/types.js';
+import type { TuiTheme } from './theme.js';
 
 function resetLabel(resetsAt: string | null): string {
   if (!resetsAt) return '';
   const ms = Date.parse(resetsAt) - Date.now();
-  if (Number.isNaN(ms) || ms <= 0) return 'reset now';
+  if (Number.isNaN(ms)) return '';
+  if (ms <= 0) return 'reset';
   const hours = Math.floor(ms / 3_600_000);
   const minutes = Math.floor((ms % 3_600_000) / 60_000);
-  return hours > 0 ? `reset in ${hours}h${minutes}m` : `reset in ${minutes}m`;
+  return hours > 0 ? `${hours}h${minutes > 0 ? `${minutes}m` : ''}` : `${Math.max(1, minutes)}m`;
 }
 
-export function BackendsPane({ backends }: { backends: BackendSnapshot[] }) {
+function stateLabel(backend: BackendSnapshot): string {
+  if (backend.status === 'disabled') return 'off';
+  if (backend.status === 'cooling-down') return `cool ${resetLabel(backend.quota.coolingUntil ?? null)}`.trim();
+  if (backend.status === 'unavailable') return backend.note?.includes('CODEX_HOME') ? 'no home' : 'missing';
+  return backend.quota.remainingFraction === null ? 'unknown' : '';
+}
+
+export function BackendsPane({ backends, theme, wide = false }: { backends: BackendSnapshot[]; theme: TuiTheme; wide?: boolean }) {
   return (
-    <Box borderStyle="round" flexDirection="column" paddingX={1} width="50%">
-      <Text bold color="cyan">Backends</Text>
+    <Box borderStyle="round" borderColor={theme.border} flexDirection="column" paddingX={1} width={wide ? '100%' : '50%'}>
+      <Text bold color={theme.primary}>Backends</Text>
       {backends.map((backend) => {
         const remaining = backend.quota.remainingFraction === null ? 'UNKNOWN' : `${Math.round(backend.quota.remainingFraction * 100)}%`;
-        const bar = backend.quota.remainingFraction === null
-          ? '░'.repeat(10)
-          : `${'█'.repeat(Math.round(backend.quota.remainingFraction * 10))}${'░'.repeat(10 - Math.round(backend.quota.remainingFraction * 10))}`;
-        const color = backend.status === 'disabled' ? 'gray'
-          : backend.status === 'available' ? 'green'
-            : backend.status === 'cooling-down' ? 'magenta' : 'yellow';
+        const filled = backend.quota.remainingFraction === null ? 0 : Math.round(backend.quota.remainingFraction * 6);
+        const bar = `${'█'.repeat(filled)}${'░'.repeat(6 - filled)}`;
+        const color = backend.status === 'disabled' ? theme.disabled
+          : backend.status === 'available' ? theme.success
+            : backend.status === 'cooling-down' ? theme.cooling : theme.warning;
+        const reset = resetLabel(backend.quota.resetsAt);
+        const state = stateLabel(backend);
         return (
-          <Box key={backend.id} flexDirection="column">
+          <Box key={backend.id}>
             <Text color={color}>
-              {backend.id.padEnd(10)} {backend.status.padEnd(13)} {remaining.padStart(7)} [{backend.quota.source.toUpperCase()}]
+              {backend.id.padEnd(9)} {remaining.padStart(7)}
+              <Text color={theme.quota}> {bar}</Text>
+              <Text dimColor>{reset ? ` ${reset}` : ''}{state ? ` · ${state}` : ''}{backend.quota.source === 'manual' ? ' · manual' : ''}</Text>
             </Text>
-            <Text dimColor>  {bar} {resetLabel(backend.quota.resetsAt)}{backend.note ? ` — ${backend.note}` : ''}</Text>
           </Box>
         );
       })}

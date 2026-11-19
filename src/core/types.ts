@@ -10,6 +10,9 @@ export const BACKEND_IDS = [
 
 export type BackendId = (typeof BACKEND_IDS)[number];
 
+export const THEME_IDS = ['ember', 'classic', 'aurora', 'violet'] as const;
+export type ThemeId = (typeof THEME_IDS)[number];
+
 export type BackendStatus = 'available' | 'unavailable' | 'cooling-down' | 'disabled';
 
 /** One quota window, normalized across backends (handoff §5). */

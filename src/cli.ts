@@ -16,7 +16,9 @@ import {
   validateCron,
 } from './core/schedules.js';
 import { getPriors } from './core/scoring.js';
-import { BACKEND_IDS, type BackendId } from './core/types.js';
+import { BACKEND_IDS, THEME_IDS, type BackendId, type ThemeId } from './core/types.js';
+import { loadConfig, setTheme } from './config.js';
+import { THEMES } from './tui/theme.js';
 import { runDoctor } from './doctor.js';
 import { runLearn } from './core/learn.js';
 import { installForBackend, toolsStatus } from './mcp/install.js';
@@ -28,6 +30,7 @@ export type Command =
   | { name: 'doctor'; quick?: boolean; full?: boolean }
   | { name: 'learn' }
   | { name: 'tokens' }
+  | { name: 'theme'; action: 'list' | 'set'; theme?: ThemeId }
   | { name: 'tools'; action: 'install' | 'status' }
   | { name: 'graph'; action: 'init' | 'status' | 'refresh'; path: string; force?: boolean }
   | {
@@ -48,6 +51,10 @@ function isBackend(value: string): value is BackendId {
   return BACKEND_IDS.includes(value as BackendId);
 }
 
+function isTheme(value: string): value is ThemeId {
+  return THEME_IDS.includes(value as ThemeId);
+}
+
 export function parseArgs(argv: string[]): Command {
   if (argv.length === 0) return { name: 'tui' };
   const [name, ...rest] = argv;
@@ -55,6 +62,15 @@ export function parseArgs(argv: string[]): Command {
   if (name === 'status') return { name: 'status' };
   if (name === 'learn') return { name: 'learn' };
   if (name === 'tokens') return { name: 'tokens' };
+  if (name === 'theme') {
+    if (rest.length === 0 || (rest.length === 1 && rest[0] === 'list')) {
+      return { name: 'theme', action: 'list' };
+    }
+    if (rest.length === 2 && rest[0] === 'set' && isTheme(rest[1])) {
+      return { name: 'theme', action: 'set', theme: rest[1] };
+    }
+    throw new Error(`Usage: scode theme [list | set <${THEME_IDS.join('|')}>]`);
+  }
   if (name === 'doctor') {
     return {
       name: 'doctor',
@@ -175,6 +191,7 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
       '  jcode doctor [--quick] [--full]          Phase 0 machine smoke tests',
       '  jcode learn                              learning fold (Phase 5)',
       '  jcode tokens                             token usage dashboard (today + last 7 days)',
+      `  scode theme [list | set <${THEME_IDS.join('|')}>]  choose a TUI color theme`,
       '  jcode tools <install|status>             wire the jcode-tools MCP server into backends',
       '  jcode graph <init|status|refresh> [path] code graph for a repo (Graphify, local only)',
       '  jcode schedule add "<task>" --cron "0 9 * * 1-5"  recurring job (local time)',
@@ -188,6 +205,19 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
   }
   if (command.name === 'learn') {
     return runLearn();
+  }
+  if (command.name === 'theme') {
+    if (command.action === 'set') {
+      const theme = command.theme;
+      if (!theme) throw new Error('A theme is required when using `scode theme set`.');
+      await setTheme(theme);
+      console.log(`Theme set to ${THEMES[theme].name}. Restart the TUI to apply it.`);
+    } else {
+      const config = await loadConfig();
+      console.log(`Current theme: ${THEMES[config.theme].name} (${config.theme})`);
+      console.log('Available themes: ember (red/black), classic (cyan/purple), aurora (green/blue), violet (lavender/pink)');
+    }
+    return 0;
   }
   if (command.name === 'tokens') {
     // 2000 records ≈ 1000 runs — comfortably covers a heavy week.

@@ -1,11 +1,13 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { THEME_IDS, type ThemeId } from './core/types.js';
 
 export interface JcodeConfig {
   quotaFloor: number;
   defaultTimeoutMs: number;
   claudeEnabled: boolean;
+  theme: ThemeId;
   codexHomes: { a?: string; b?: string };
   opencodeModel: string;
   /** Attach to a warm `opencode serve` to avoid MCP cold-boot. */
@@ -40,6 +42,7 @@ const defaults: JcodeConfig = {
   quotaFloor: 0.1,
   defaultTimeoutMs: 30 * 60 * 1000,
   claudeEnabled: false,
+  theme: 'ember',
   codexHomes: {},
   opencodeModel: 'opencode/big-pickle',
 };
@@ -70,6 +73,10 @@ export async function ensureStateHome(): Promise<void> {
   await mkdir(stateHome(), { recursive: true });
 }
 
+function isThemeId(value: unknown): value is ThemeId {
+  return typeof value === 'string' && THEME_IDS.some((theme) => theme === value);
+}
+
 export async function loadConfig(): Promise<JcodeConfig> {
   await ensureStateHome();
   const paths = statePaths();
@@ -86,6 +93,7 @@ export async function loadConfig(): Promise<JcodeConfig> {
   return {
     ...defaults,
     ...fromDisk,
+    theme: isThemeId(fromDisk.theme) ? fromDisk.theme : defaults.theme,
     claudeEnabled: process.env.JCODE_CLAUDE_ENABLED === 'true' && fromDisk.claudeEnabled === true,
     codexHomes: {
       ...defaults.codexHomes,
@@ -104,4 +112,22 @@ export async function loadConfig(): Promise<JcodeConfig> {
       autoBuild: fromDisk.graphify?.autoBuild ?? true,
     },
   };
+}
+
+export async function setTheme(theme: ThemeId): Promise<void> {
+  await ensureStateHome();
+  const { config } = statePaths();
+  let current: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = JSON.parse(await readFile(config, 'utf8'));
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      throw new Error(`Invalid config object in ${config}`);
+    }
+    current = parsed as Record<string, unknown>;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  const temporary = `${config}.${process.pid}.tmp`;
+  await writeFile(temporary, `${JSON.stringify({ ...current, theme }, null, 2)}\n`, { mode: 0o600 });
+  await rename(temporary, config);
 }
