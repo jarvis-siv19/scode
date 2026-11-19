@@ -1,6 +1,6 @@
-# jcode
+# scode
 
-[![CI](https://github.com/sivab193/jcode/actions/workflows/ci.yml/badge.svg)](https://github.com/sivab193/jcode/actions/workflows/ci.yml)
+[![CI](https://github.com/sivab193/scode/actions/workflows/ci.yml/badge.svg)](https://github.com/sivab193/scode/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 `jcode` is a local-first, quota-aware router for coding-agent CLIs. One command
@@ -48,11 +48,11 @@ its smoke test passes. Never enable it on your own.
 
 ## Quick start
 
-Requires Node.js 20+ and at least one authenticated backend CLI.
+Requires Node.js 22+ and at least one authenticated backend CLI.
 
 ```sh
-git clone https://github.com/sivab193/jcode.git
-cd jcode
+git clone https://github.com/sivab193/scode.git
+cd scode
 npm install
 npm run build
 npm link                       # install the `jcode` command locally
@@ -74,9 +74,9 @@ name is already owned by an unrelated package. See
 
 ## Links
 
-- [source code](https://github.com/sivab193/jcode)
-- [issues and feature requests](https://github.com/sivab193/jcode/issues)
-- [releases](https://github.com/sivab193/jcode/releases)
+- [source code](https://github.com/sivab193/scode)
+- [issues and feature requests](https://github.com/sivab193/scode/issues)
+- [releases](https://github.com/sivab193/scode/releases)
 
 ## Terminal UI
 

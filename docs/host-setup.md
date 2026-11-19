@@ -7,7 +7,7 @@ spawns the official CLI, which keeps its own login.
 
 ## 1. Prereqs
 
-- Node.js 20+ (`node --version`)
+- Node.js 22+ (`node --version`)
 - git
 - A terminal that supports Ink (Terminal and iTerm2 are both fine)
 - Python 3.11+ (for the Graphify code graph — optional; everything else
