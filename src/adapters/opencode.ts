@@ -18,10 +18,19 @@ import type { AdapterCallbacks, BackendAdapter } from './types.js';
 export class OpenCodeAdapter implements BackendAdapter {
   async run(request: RunRequest, callbacks: AdapterCallbacks) {
     const config = await loadConfig();
-    const args = ['run', request.brief, '--format', 'json', '-m', config.opencodeModel];
+    // A long-lived background server can retain the project directory from a
+    // previous invocation. Standalone guarantees this run belongs to the
+    // scode worktree supplied as the child process cwd.
+    const args = ['--standalone', 'run', request.brief, '--format', 'json', '-m', config.opencodeModel];
     if (config.opencodeAttachUrl) args.push('--attach', config.opencodeAttachUrl);
-    if (request.sessionId) args.push('--continue');
-    const { spec, wrapped } = await wrapSpawn({ command: 'opencode', args }, request.backend, config);
+    if (request.sessionId) args.push('--session', request.sessionId);
+    const { spec, wrapped } = await wrapSpawn({
+      command: 'opencode',
+      args,
+      // Bun/OpenCode consults PWD when resolving its project. Node's spawn
+      // changes the real cwd but otherwise inherits the parent's stale PWD.
+      env: { PWD: request.cwd },
+    }, request.backend, config);
     const result = await runProcess(spec, request, callbacks);
     return { ...result, cavemanWrapped: wrapped };
   }

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * jcode-tools MCP server (Phase 4). Stdio transport — spawned by the coding
- * CLIs via `node <jcode>/dist/mcp/server.js` (see `jcode tools install`).
+ * CLIs via `node <scode>/dist/mcp/server.js` (see `scode tools install`).
  * All logging goes to stderr; stdout is the protocol.
  */
 import { appendFile } from 'node:fs/promises';

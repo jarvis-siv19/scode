@@ -72,10 +72,10 @@ test('pdf-read: extracts text from a real PDF', async (t) => {
   }
   const dir = await mkdtemp(join(tmpdir(), 'jcode-pdf-'));
   const file = join(dir, 'sample.pdf');
-  await writeFile(file, minimalPdf('jcode pdf ok'));
+  await writeFile(file, minimalPdf('scode pdf ok'));
   const result = await readPdf({ path: file });
   assert.equal(result.isError, false);
-  assert.match(result.text, /jcode pdf ok/);
+  assert.match(result.text, /scode pdf ok/);
 });
 
 test('pdf-read: missing file is a clean error', async () => {
@@ -122,7 +122,7 @@ test('graph-query: errors clearly when no graph exists in the repo', async () =>
     const result = await queryGraphTool({ question: 'who calls hello' });
     assert.equal(result.isError, true);
     assert.match(result.text, /no code graph/);
-    assert.match(result.text, /jcode graph init/);
+    assert.match(result.text, /scode graph init/);
   } finally {
     process.chdir(savedCwd);
   }
@@ -130,7 +130,7 @@ test('graph-query: errors clearly when no graph exists in the repo', async () =>
 
 test('graph-query: queries the graph via a fake graphify binary', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'jcode-graph-query-test-'));
-  const { mkdir, chmod } = await import('node:fs/promises');
+  const { mkdir } = await import('node:fs/promises');
   await mkdir(join(dir, 'graphify-out'), { recursive: true });
   await writeFile(join(dir, 'graphify-out', 'graph.json'), JSON.stringify({
     directed: false,
@@ -139,21 +139,72 @@ test('graph-query: queries the graph via a fake graphify binary', async () => {
     links: [],
     built_at_commit: 'abc',
   }));
-  const binDir = join(dir, 'bin');
-  await mkdir(binDir, { recursive: true });
-  const fake = join(binDir, 'graphify');
-  await writeFile(fake, '#!/bin/sh\necho "FAKE: $*"\n');
-  await chmod(fake, 0o755);
+  const fake = join(dir, 'fake-graphify.mjs');
+  await writeFile(fake, 'console.log(`FAKE: ${process.argv.slice(2).join(" ")}`);\n');
   const savedCwd = process.cwd();
-  const savedPath = process.env.PATH;
   process.chdir(dir);
-  process.env.PATH = `${binDir}:${savedPath ?? ''}`;
   try {
-    const result = await queryGraphTool({ kind: 'explain', question: 'greet' });
+    const result = await queryGraphTool(
+      { kind: 'explain', question: 'greet' },
+      { binary: process.execPath, binaryArgs: [fake] },
+    );
     assert.equal(result.isError, false);
     assert.match(result.text, /FAKE: explain greet/);
   } finally {
     process.chdir(savedCwd);
-    process.env.PATH = savedPath;
+  }
+});
+
+test('thread-list: empty store reports honestly', async () => {
+  const { listThreadsTool } = await import('../dist/mcp/tools.js');
+  const dir = await mkdtemp(join(tmpdir(), 'jcode-mcp-threads-'));
+  const savedHome = process.env.JCODE_HOME;
+  process.env.JCODE_HOME = dir;
+  try {
+    const result = await listThreadsTool();
+    assert.equal(result.isError, false);
+    assert.match(result.text, /No threads yet/);
+  } finally {
+    if (savedHome === undefined) delete process.env.JCODE_HOME;
+    else process.env.JCODE_HOME = savedHome;
+  }
+});
+
+test('thread-status and thread-diff: read a real thread', async () => {
+  const { execFile } = await import('node:child_process');
+  const { createThread } = await import('../dist/core/threads.js');
+  const { threadStatusTool, threadDiffTool } = await import('../dist/mcp/tools.js');
+  const home = await mkdtemp(join(tmpdir(), 'jcode-mcp-threads2-'));
+  const repo = await mkdtemp(join(tmpdir(), 'jcode-mcp-repo-'));
+  const git = (args: string[], cwd: string) => new Promise<string>((resolvePromise, reject) => {
+    execFile('git', args, { cwd }, (error, stdout, stderr) => {
+      if (error) reject(new Error(stderr.toString() || error.message));
+      else resolvePromise(stdout.toString());
+    });
+  });
+  await git(['init', '-b', 'main'], repo);
+  await git(['config', 'user.name', 'Test'], repo);
+  await git(['config', 'user.email', 'test@example.com'], repo);
+  await writeFile(join(repo, 'a.txt'), 'one\n');
+  await git(['add', '.'], repo);
+  await git(['commit', '-m', 'initial'], repo);
+  const savedHome = process.env.JCODE_HOME;
+  process.env.JCODE_HOME = home;
+  try {
+    const thread = await createThread('Change a file', { cwd: repo });
+    await git(['clean', '-fd'], thread.worktree);
+    await writeFile(join(thread.worktree, 'a.txt'), 'one\ntwo\n');
+    const status = await threadStatusTool({ threadId: thread.id });
+    assert.equal(status.isError, false);
+    assert.match(status.text, new RegExp(thread.branch.replace('/', '\\/')));
+    const diff = await threadDiffTool({ threadId: thread.id.slice(0, 4) });
+    assert.equal(diff.isError, false);
+    assert.match(diff.text, /Uncommitted \(1\)/);
+    const missing = await threadStatusTool({ threadId: 'zzzz' });
+    assert.equal(missing.isError, true);
+    assert.match(missing.text, /No thread matches/);
+  } finally {
+    if (savedHome === undefined) delete process.env.JCODE_HOME;
+    else process.env.JCODE_HOME = savedHome;
   }
 });

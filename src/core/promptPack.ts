@@ -6,7 +6,7 @@
  *   under `## Task`, working rules below). The ledger still records the raw
  *   brief, so the learn loop analyses what the user actually wrote.
  * - `installPromptPack()` seeds a job's worktree with AGENTS.md (codex/agy),
- *   CLAUDE.md (claude), `.kiro/steering/jcode.md` (kiro) and JCODE_NOTES.md
+ *   CLAUDE.md (claude), `.kiro/steering/scode.md` (kiro) and JCODE_NOTES.md
  *   (shared lessons) — but only when the target repo does not already have
  *   that file. It never overwrites the repo's own steering.
  *
@@ -40,7 +40,7 @@ const PACK_FILES: { src: string; dest: string }[] = [
   { src: 'AGENTS.md', dest: 'AGENTS.md' },
   { src: 'CLAUDE.md', dest: 'CLAUDE.md' },
   { src: 'JCODE_NOTES.md', dest: 'JCODE_NOTES.md' },
-  { src: 'kiro-steering.md', dest: '.kiro/steering/jcode.md' },
+  { src: 'kiro-steering.md', dest: '.kiro/steering/scode.md' },
 ];
 
 function packSource(name: string): string {

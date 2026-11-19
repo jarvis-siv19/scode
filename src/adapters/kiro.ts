@@ -7,7 +7,7 @@ import type { AdapterCallbacks, BackendAdapter } from './types.js';
 /**
  * Kiro: `kiro-cli chat --no-interactive --trust-all-tools
  * --output-format stream-json "<brief>"` (handoff §5).
- * Auth: KIRO_API_KEY (Pro+) from the environment — jcode never stores it.
+ * Auth: KIRO_API_KEY (Pro+) from the environment — scode never stores it.
  * Exit codes 0/1/3/4 per the vendor; resume via --resume-id.
  */
 export class KiroAdapter implements BackendAdapter {

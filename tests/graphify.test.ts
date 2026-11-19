@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -116,8 +116,8 @@ test('graphify: resolveMainCheckout finds the main checkout from a worktree', as
   try {
     await git(['worktree', 'add', '-q', worktree, 'HEAD'], dir);
     const main = await resolveMainCheckout(worktree);
-    assert.equal(main, dir);
-    assert.equal(await resolveMainCheckout(dir), dir);
+    assert.equal(await realpath(main), await realpath(dir));
+    assert.equal(await realpath(await resolveMainCheckout(dir)), await realpath(dir));
   } finally {
     await git(['worktree', 'remove', '--force', worktree], dir).catch(() => undefined);
     await rm(dir, { recursive: true, force: true });
@@ -148,41 +148,37 @@ test('graphify: ensureGitignored adds graphify-out/ once, never twice', async ()
 
 test('graphify: runGraphQuery maps exit codes 0/3/4 to answers, others to errors', async () => {
   const dir = await tempRepo();
-  const binDir = join(dir, 'bin');
-  await mkdir(binDir, { recursive: true });
-  // Fake graphify: echoes its args, exits with $FAKE_EXIT (default 0).
-  const fake = join(binDir, 'graphify');
-  await writeFile(fake, '#!/bin/sh\necho "FAKE-QUERY args: $*"\nexit ${FAKE_EXIT:-0}\n');
-  await chmod(fake, 0o755);
-  const savedPath = process.env.PATH;
-  process.env.PATH = `${binDir}:${savedPath ?? ''}`;
+  // A Node script is portable across Windows and POSIX; binaryArgs lets the
+  // test exercise the real argument mapping without a shell shim.
+  const fake = join(dir, 'fake-graphify.mjs');
+  await writeFile(fake, 'console.log(`FAKE-QUERY args: ${process.argv.slice(2).join(" ")}`); process.exit(Number(process.env.FAKE_EXIT ?? 0));\n');
   try {
     await mkdir(join(dir, 'graphify-out'), { recursive: true });
     await writeFile(graphJsonPath(dir), fakeGraphJson('x'));
 
-    const ok = await runGraphQuery(dir, 'query', { question: 'who calls hello', budget: 500 });
+    const runtime = { binary: process.execPath, binaryArgs: [fake] };
+    const ok = await runGraphQuery(dir, 'query', { question: 'who calls hello', budget: 500, ...runtime });
     assert.equal(ok.ok, true);
     assert.match(ok.text, /FAKE-QUERY args: query who calls hello/);
     assert.match(ok.text, /--budget 500/);
 
     process.env.FAKE_EXIT = '3';
-    const ambiguous = await runGraphQuery(dir, 'explain', { question: 'hello' });
+    const ambiguous = await runGraphQuery(dir, 'explain', { question: 'hello', ...runtime });
     assert.equal(ambiguous.ok, true, 'exit 3 (ambiguous) is an answer, not an error');
 
     process.env.FAKE_EXIT = '4';
-    const noMatch = await runGraphQuery(dir, 'affected', { question: 'nope' });
+    const noMatch = await runGraphQuery(dir, 'affected', { question: 'nope', ...runtime });
     assert.equal(noMatch.ok, true, 'exit 4 (no match) is an answer, not an error');
 
     process.env.FAKE_EXIT = '1';
-    const failed = await runGraphQuery(dir, 'query', { question: 'who calls hello' });
+    const failed = await runGraphQuery(dir, 'query', { question: 'who calls hello', ...runtime });
     assert.equal(failed.ok, false);
 
-    const missing = await runGraphQuery(dir, 'path', { question: 'a' });
+    const missing = await runGraphQuery(dir, 'path', { question: 'a', ...runtime });
     assert.equal(missing.ok, false, 'path without a target is a caller error');
     assert.match(missing.text, /needs a question.*and a target/);
   } finally {
     delete process.env.FAKE_EXIT;
-    process.env.PATH = savedPath;
     await rm(dir, { recursive: true, force: true });
   }
 });

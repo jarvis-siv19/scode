@@ -1,7 +1,8 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { ensureStateHome, loadConfig, statePaths } from '../config.js';
+import { detectBackendAuth } from './auth.js';
 import { BACKEND_BINARIES, MANUAL_TTL_MS, PROBE_TTL_MS, cliInfo, probeBackend } from './probes.js';
-import { BACKEND_IDS, type BackendId, type BackendSnapshot, type QuotaWindow } from './types.js';
+import { BACKEND_IDS, type BackendId, type BackendSnapshot, type QuotaMode, type QuotaWindow } from './types.js';
 
 export type QuotaState = Partial<Record<BackendId, QuotaWindow>>;
 
@@ -14,6 +15,20 @@ const models: Record<BackendId, string> = {
   opencode: 'free model',
   claude: 'disabled pending Pro',
 };
+
+const defaultNames: Record<BackendId, string> = {
+  'codex-a': 'Codex A',
+  'codex-b': 'Codex B',
+  kiro: 'Kiro',
+  agy: 'Antigravity',
+  copilot: 'Copilot',
+  opencode: 'OpenCode',
+  claude: 'Claude',
+};
+
+function nextCalendarMonth(from = new Date()): string {
+  return new Date(from.getFullYear(), from.getMonth() + 1, 1, 0, 0, 0, 0).toISOString();
+}
 
 export async function readQuotaState(): Promise<QuotaState> {
   try {
@@ -53,6 +68,12 @@ export async function refreshProbes(): Promise<QuotaState> {
   const toProbe: BackendId[] = [];
 
   for (const id of BACKEND_IDS) {
+    // Without a separate home, codex-b is the same account as codex-a. Do not
+    // probe it or retain a duplicated quota window that looks like a second pool.
+    if (id === 'codex-b' && !config.codexHomes.b) {
+      delete next[id];
+      continue;
+    }
     const current = state[id];
     // Manual entries age out.
     if (current?.source === 'manual' && current.manualExpiresAt && Date.parse(current.manualExpiresAt) <= now) {
@@ -117,30 +138,68 @@ export async function backendSnapshots(options?: { refresh?: boolean }): Promise
   const now = new Date().toISOString();
   const nowMs = Date.now();
 
-  const infos = await Promise.all(
-    BACKEND_IDS.map(async (id) => ({ id, info: await cliInfo(BACKEND_BINARIES[id]) })),
+  const details = await Promise.all(
+    BACKEND_IDS.map(async (id) => ({
+      id,
+      info: await cliInfo(BACKEND_BINARIES[id]),
+      authProvider: await detectBackendAuth(id, config),
+    })),
   );
-  const infoById = new Map(infos.map(({ id, info }) => [id, info]));
+  const infoById = new Map(details.map(({ id, info }) => [id, info]));
+  const authById = new Map(details.map(({ id, authProvider }) => [id, authProvider]));
 
   return BACKEND_IDS.map((id) => {
-    const quota = state[id] ?? placeholder(now);
+    let quota = state[id] ?? placeholder(now);
     const disabled = id === 'claude' && !config.claudeEnabled;
     const info = infoById.get(id) ?? { present: false };
     const cooling = !!quota.coolingUntil && Date.parse(quota.coolingUntil) > nowMs;
     // codex-b without its own CODEX_HOME would silently use account A's login
     // and double-count one pool — treat it as unavailable, not available.
     const missingHome = id === 'codex-b' && !config.codexHomes.b;
+    const exhausted = quota.remainingFraction === 0 && id === 'kiro';
+    if (id === 'kiro' && (exhausted || quota.remainingFraction !== null) && !quota.resetsAt) {
+      quota = { ...quota, resetsAt: nextCalendarMonth(), windowMinutes: 43_200 };
+    }
     const status = disabled ? 'disabled'
+      : exhausted ? 'cooling-down'
       : cooling ? 'cooling-down'
         : !info.present || missingHome ? 'unavailable'
           : 'available';
+    const authProvider = authById.get(id) ?? undefined;
+    const loginStatus = missingHome ? 'setup' as const
+      : authProvider ? 'active' as const
+        : disabled ? 'disabled' as const
+          : 'logged-out' as const;
+    const quotaMode: QuotaMode = quota.remainingFraction !== null ? 'window'
+      : id === 'agy' || id === 'copilot' || id === 'kiro' ? 'reactive'
+        : id === 'opencode' || id === 'claude' ? 'provider'
+          : 'unknown';
     const note = disabled ? 'Claude Pro not confirmed'
+      : exhausted ? 'monthly limit reached · renews at the start of next month'
       : cooling ? `cooling down until ${quota.coolingUntil}`
         : !info.present ? `${BACKEND_BINARIES[id]} not installed`
           : missingHome ? 'no CODEX_HOME configured (JCODE_CODEX_B_HOME)'
-            : quota.source === 'placeholder' ? 'quota unknown'
+            : quota.source === 'placeholder' && quotaMode === 'reactive' ? 'limits detected during runs'
+              : quota.source === 'placeholder' && id === 'opencode' ? 'quota belongs to the selected provider'
+                : quota.source === 'placeholder' && id === 'claude' ? 'provider-metered usage'
+                  : quota.source === 'placeholder' ? 'quota probe unavailable'
               : quota.source === 'manual' ? 'MANUAL entry'
                 : undefined;
-    return { id, model: models[id], status, quota, cliPresent: info.present, cliVersion: info.version, note };
+    const profile = config.backendProfiles?.[id];
+    const model = id === 'opencode' ? config.opencodeModel : models[id];
+    return {
+      id,
+      displayName: profile?.label?.trim() || defaultNames[id],
+      accountLabel: profile?.account?.trim() || undefined,
+      loginStatus,
+      model,
+      status,
+      quota,
+      cliPresent: info.present,
+      cliVersion: info.version,
+      authProvider,
+      quotaMode,
+      note,
+    };
   });
 }

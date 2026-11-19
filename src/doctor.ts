@@ -1,5 +1,5 @@
 /**
- * Phase 0 — machine smoke tests (`jcode doctor`).
+ * Phase 0 — machine smoke tests (`scode doctor`).
  *
  * Verifies each backend's headless command works from THIS machine, plus the
  * quota probes, the Caveman wrap, and MCP config presence. Results are
@@ -42,7 +42,7 @@ export interface DoctorOptions {
 }
 
 const SMOKE_BRIEF =
-  "Create a file named SMOKE.md in the current directory containing exactly the line 'jcode smoke ok' and nothing else. Do not modify any other file.";
+  "Create a file named SMOKE.md in the current directory containing exactly the line 'scode smoke ok' and nothing else. Do not modify any other file.";
 const SMOKE_TIMEOUT_MS = 5 * 60 * 1000;
 
 function parseVersion(text: string | undefined): [number, number, number] | null {
@@ -77,7 +77,7 @@ async function runSmokeDispatch(backend: BackendId, adapter: BackendAdapter): Pr
     } catch {
       // Marker missing — the agent ran but did not do the job.
     }
-    if (result.success && content.trim() === 'jcode smoke ok') {
+    if (result.success && content.trim() === 'scode smoke ok') {
       return { id: `dispatch-${backend}`, label: `headless dispatch (${backend})`, status: 'pass', detail: `SMOKE.md created in ${Math.round(result.durationMs / 1000)}s` };
     }
     if (result.success) {
@@ -143,7 +143,7 @@ async function testMcpServer(): Promise<CheckResult> {
           } else if (message.id === 2) {
             clearTimeout(timer);
             const names = (message.result?.tools ?? []).map((tool) => tool.name).sort();
-            const expected = ['file-peek', 'graph-query', 'latex-build', 'pdf-read'];
+            const expected = ['file-peek', 'graph-query', 'latex-build', 'pdf-read', 'thread-diff', 'thread-list', 'thread-status'];
             const ok = JSON.stringify(names) === JSON.stringify(expected);
             finish({
               id: 'mcp-server',
@@ -230,14 +230,23 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<{ results:
     push({ id: 'copilot-version', label: 'copilot >= 1.0.28 (reliable JSONL)', status: 'skip', detail: 'copilot not installed' });
   }
 
-  // OpenCode v2 only.
+  // OpenCode packages have two separate CLI generations. Presence of the
+  // `run --format json` command is the compatibility requirement; a
+  // semver-only check can misclassify a working installed CLI.
   if (present.get('opencode')) {
-    const version = parseVersion(versions.get('opencode'));
+    const text = await new Promise<string>((resolve) => {
+      execFile('opencode', ['run', '--help'], { timeout: 10_000, windowsHide: true }, (_error, stdout, stderr) => {
+        resolve(`${stdout}${stderr}`);
+      });
+    });
+    const runCompatible = text.includes('--format') || text.includes('--model');
     push({
       id: 'opencode-version',
-      label: 'opencode v2',
-      status: version && version[0] >= 2 ? 'pass' : 'fail',
-      detail: versions.get('opencode') ?? 'version unknown',
+      label: 'opencode headless run command',
+      status: runCompatible ? 'pass' : 'fail',
+      detail: runCompatible
+        ? `${versions.get('opencode') ?? 'version unknown'} supports run --format`
+        : 'opencode run --format interface was not found',
     });
   } else {
     push({ id: 'opencode-version', label: 'opencode v2', status: 'skip', detail: 'opencode not installed' });
@@ -267,7 +276,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<{ results:
       label: 'headless dispatch (claude)',
       status: 'skip',
       detail: config.claudeEnabled
-        ? 'Pro enabled in config but smoke not run yet — run `jcode doctor` again after confirming Pro'
+        ? 'Pro enabled in config but smoke not run yet — run `scode doctor` again after confirming Pro'
         : 'Claude Pro not confirmed live; skipped by design',
     });
   }
@@ -348,7 +357,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<{ results:
     id: 'caveman-present',
     label: 'caveman installed',
     status: caveman.present ? 'pass' : 'skip',
-    detail: caveman.present ? (caveman.version ?? 'installed') : 'not installed — Phase 3; install with `npx @caveman-ai/cli@latest`, telemetry off, Auto off',
+    detail: caveman.present ? (caveman.version ?? 'installed') : 'not installed — Phase 3; install with `npm install -g @caveman-ai/cli@latest`, then run `caveman setup --install` and `caveman telemetry off`',
   });
   if (options.full && caveman.present && present.get('codex-a')) {
     // Wrap test: does `caveman codex exec` keep the JSON stream intact?
@@ -358,8 +367,8 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<{ results:
       const result = await new Promise<{ exitCode: number | null; stdout: string }>((resolve) => {
         execFile(
           'caveman',
-          ['codex', 'exec', '--json', '--sandbox', 'workspace-write', '-C', dir, SMOKE_BRIEF],
-          { timeout: SMOKE_TIMEOUT_MS, windowsHide: true },
+          ['codex', 'exec', '--json', '--sandbox', 'workspace-write', '--skip-git-repo-check', '-C', dir, SMOKE_BRIEF],
+          { cwd: dir, timeout: SMOKE_TIMEOUT_MS, windowsHide: true },
           (error, stdout) => resolve({ exitCode: error ? 1 : 0, stdout: stdout.toString() }),
         );
       });
@@ -378,7 +387,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<{ results:
       id: 'caveman-wrap',
       label: 'caveman wraps codex exec (JSON stream intact)',
       status: 'skip',
-      detail: options.full ? 'needs caveman + codex installed' : 'run `jcode doctor --full` for the live wrap test',
+      detail: options.full ? 'needs caveman + codex installed' : 'run `scode doctor --full` for the live wrap test',
     });
   }
 
@@ -406,7 +415,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<{ results:
       id: 'graphify-mcp',
       label: 'graphify-mcp binary ([mcp] extra)',
       status: mcpExtra ? 'pass' : 'skip',
-      detail: mcpExtra ? 'installed' : 'not installed — not required; jcode queries the graph via the CLI, not the MCP server',
+      detail: mcpExtra ? 'installed' : 'not installed — not required; scode queries the graph via the CLI, not the MCP server',
     });
   } else {
     push({ id: 'python-version', label: 'Python >= 3.11 (graphify needs it)', status: 'skip', detail: 'graphify not installed' });
@@ -435,10 +444,10 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<{ results:
       label,
       status: text !== null && text.includes(SERVER_NAME) ? 'pass' : 'skip',
       detail: text === null
-        ? `no config file yet — run \`jcode tools install\``
+        ? `no config file yet — run \`scode tools install\``
         : text.includes(SERVER_NAME)
           ? 'jcode-tools entry present'
-          : `config exists without jcode-tools — run \`jcode tools install\``,
+          : `config exists without jcode-tools — run \`scode tools install\``,
     });
   }
 

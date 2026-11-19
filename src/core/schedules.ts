@@ -2,17 +2,16 @@ import { randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { CronExpressionParser } from 'cron-parser';
 import { ensureStateHome, statePaths } from '../config.js';
-import { classifyAsync } from './classifier.js';
 import { dispatch } from './dispatcher.js';
-import { selectBackend } from './policy.js';
+import { routeTask } from './router.js';
 import { backendSnapshots } from './quota.js';
 import { getPriors } from './scoring.js';
 import type { BackendId, RunResult } from './types.js';
 
 /**
  * Scheduled jobs. Schedules live in `~/.jcode/schedules.json` (versioned,
- * so the shape can evolve). jcode is a CLI, not a daemon, so nothing fires
- * on its own — schedules fire when something runs `jcode schedule tick`:
+ * so the shape can evolve). scode is a CLI, not a daemon, so nothing fires
+ * on its own — schedules fire when something runs `scode schedule tick`:
  * the OS scheduler (see `installHint()`), or the TUI, which ticks every
  * minute while it is open.
  *
@@ -135,7 +134,7 @@ export async function addSchedule(input: AddScheduleInput): Promise<Schedule> {
   if (!schedule.nextRunAt) {
     throw new Error(
       schedule.kind === 'once'
-        ? 'That time is already past. Use a future time, or `jcode run` for right now.'
+        ? 'That time is already past. Use a future time, or `scode run` for right now.'
         : 'Could not compute a next run for that cron expression.',
     );
   }
@@ -199,7 +198,8 @@ export interface TickEvents {
 
 export interface TickOptions extends TickEvents {
   /** Defaults to the real dispatch path (classify -> select -> dispatch). */
-  dispatchFn?: (schedule: Schedule, onOutput?: (chunk: string) => void) => Promise<RunResult>;
+  dispatchFn?: (schedule: Schedule, onOutput?: (chunk: string) => void, signal?: AbortSignal) => Promise<RunResult>;
+  signal?: AbortSignal;
   now?: Date;
   /** List what would fire without dispatching or touching the store. */
   dryRun?: boolean;
@@ -211,17 +211,17 @@ export interface TickResult {
   dryRun: boolean;
 }
 
-/** The real dispatch path for one due schedule: same routing as `jcode run`. */
+/** The real dispatch path for one due schedule: same routing as `scode run`. */
 export async function dispatchScheduled(
   schedule: Schedule,
   onOutput?: (chunk: string) => void,
+  signal?: AbortSignal,
 ): Promise<RunResult> {
-  const classification = await classifyAsync(schedule.brief);
   const snapshots = await backendSnapshots();
   const priors = await getPriors();
-  const selection = selectBackend(classification, snapshots, schedule.backend, { priors });
+  const { classification, selection } = await routeTask(schedule.brief, snapshots, schedule.backend, { priors });
   const stream = onOutput
-    ? { onStdout: onOutput, onStderr: onOutput }
+    ? { onStdout: () => {}, onStderr: () => {}, onDisplay: onOutput }
     : undefined;
   return dispatch({
     brief: schedule.brief,
@@ -231,6 +231,7 @@ export async function dispatchScheduled(
     selectionReason: `scheduled (${schedule.id}): ${selection.reason}`,
     classification: { ...classification },
     scheduleId: schedule.id,
+    signal,
     ...stream,
   });
 }
@@ -275,13 +276,14 @@ export async function runDueSchedules(options: TickOptions = {}): Promise<TickRe
 
   const fired: TickResult['fired'] = [];
   for (const schedule of due) {
+    if (options.signal?.aborted) break;
     const jobId = `sch-${schedule.id}-${Date.now()}`;
     schedule.runningSince = now.toISOString();
     await saveSchedules(schedules);
     options.onStart?.({ jobId, schedule });
     let result: RunResult;
     try {
-      result = await dispatchFn(schedule, (chunk) => options.onOutput?.(jobId, chunk));
+      result = await dispatchFn(schedule, (chunk) => options.onOutput?.(jobId, chunk), options.signal);
     } catch (error) {
       result = failedResult(schedule, error);
     }
@@ -314,16 +316,16 @@ export function installHint(platform: NodeJS.Platform = process.platform): strin
     return [
       'Windows Task Scheduler — run in a terminal (creates a task that ticks every 5 minutes):',
       '',
-      '  schtasks /create /tn "jcode tick" /tr "jcode schedule tick" /sc minute /mo 5 /f',
+      '  schtasks /create /tn "scode tick" /tr "scode schedule tick" /sc minute /mo 5 /f',
       '',
-      'Remove it later with: schtasks /delete /tn "jcode tick" /f',
+      'Remove it later with: schtasks /delete /tn "scode tick" /f',
       'Or skip the OS entirely: the TUI ticks due schedules every minute while it is open.',
     ].join('\n');
   }
   return [
     'Cron — add this line with `crontab -e` (ticks every 5 minutes):',
     '',
-    '  */5 * * * * jcode schedule tick >/dev/null 2>&1',
+    '  */5 * * * * scode schedule tick >/dev/null 2>&1',
     '',
     'Or skip the OS entirely: the TUI ticks due schedules every minute while it is open.',
   ].join('\n');

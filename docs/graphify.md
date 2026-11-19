@@ -1,6 +1,6 @@
 # Code graph (Graphify)
 
-jcode gives every dispatched agent a map of the repo it is working in, so it
+scode gives every dispatched agent a map of the repo it is working in, so it
 can answer "who calls X?" with one query instead of grepping and re-reading
 whole files. The map comes from **Graphify** — the open-source CLI
 ([Graphify-Labs/graphify](https://github.com/Graphify-Labs/graphify),
@@ -8,14 +8,14 @@ Apache-2.0, installed from PyPI as `graphifyy`).
 
 ## The one decision that matters: CLI, not Cloud
 
-Graphify has two halves. jcode uses only the first:
+Graphify has two halves. scode uses only the first:
 
 - **Open-source CLI** — free, local, no account. `graphify update` parses
   code with tree-sitter into a graph, with zero LLM calls and nothing leaving
   the machine. This is the jcode-compatible half.
 - **Hosted Graphify Cloud** (app.graphify.com) — free for up to 3 repos, then
   paid; it sends code to OpenAI/Anthropic subprocessors. This half conflicts
-  with jcode's local-first, no-paid-credits rules and is **not** used.
+  with scode's local-first, no-paid-credits rules and is **not** used.
 
 ## How it works
 
@@ -23,24 +23,24 @@ Graphify has two halves. jcode uses only the first:
   `$GRAPHIFY_OUT` when set). Nodes are functions, classes, files; edges are
   calls, imports, inheritance. Freshness is checked against graph.json's
   `built_at_commit` vs `git rev-parse HEAD`.
-- **`jcode graph init [path]`** — build the graph for a repo, add
+- **`scode graph init [path]`** — build the graph for a repo, add
   `graphify-out/` to its `.gitignore`, and install graphify's git hooks so
   the graph refreshes on commit. Run once per repo; new project, same one
   command.
-- **`jcode graph status [path]`** — is there a graph, how many nodes, built
+- **`scode graph status [path]`** — is there a graph, how many nodes, built
   at which commit, current or stale.
-- **`jcode graph refresh [path]`** — rebuild now (`--force` after refactors
+- **`scode graph refresh [path]`** — rebuild now (`--force` after refactors
   that delete a lot of code).
-- **Pre-dispatch indexing** — before dispatching a job, jcode builds the
+- **Pre-dispatch indexing** — before dispatching a job, scode builds the
   graph when it is missing or stale (config `graphify.autoBuild`, default
   true; `JCODE_GRAPHIFY=false` turns the whole thing off). A missing or
   failing graph never fails a job: the dispatcher warns and continues.
 - **Query path** — agents query through the `graph-query` tool in the
   `jcode-tools` MCP suite (kinds: `query`, `explain`, `path`, `affected`,
   `god-nodes`), or directly with `graphify query` on the command line. The
-  tool resolves the graph from the agent's cwd — including from a jcode
+  tool resolves the graph from the agent's cwd — including from a scode
   worktree, where it walks to the main checkout via
-  `git rev-parse --git-common-dir`. jcode deliberately does **not** wire
+  `git rev-parse --git-common-dir`. scode deliberately does **not** wire
   `graphify-mcp` per backend: that server takes the graph path as a startup
   argument, but backend MCP configs are per-user/global, so one static
   config cannot point at every repo's graph.
@@ -48,15 +48,15 @@ Graphify has two halves. jcode uses only the first:
   agents to query the graph before grepping for structure, and to use grep
   only for exact strings (error messages, config keys).
 - **Ledger** — each run-started record carries `graphPresent`,
-  `graphBuiltAtCommit`, and `graphAction`, so `jcode learn` can later
+  `graphBuiltAtCommit`, and `graphAction`, so `scode learn` can later
   compare graph-vs-no-graph token use.
-- **`jcode doctor`** checks the graphify binary, Python >= 3.11, and the
+- **`scode doctor`** checks the graphify binary, Python >= 3.11, and the
   `[mcp]` extra. All three are SKIP, never FAIL, when absent.
 
 ## Rules
 
 - **Never call `graphify extract`** (or `cluster-only`/`label` with LLM
-  naming) from jcode — the full pipeline needs an LLM backend and would
+  naming) from scode — the full pipeline needs an LLM backend and would
   break the no-paid-credits rule. Only `update` (code-only), the query
   commands, and `hook install` are ever run.
 - **Never paste graph.json into context.** A 1,500-node graph is ~400K
@@ -95,5 +95,5 @@ agent reads; Graphify reduces what it needs to read).
   April 2026). The integration was verified against 0.9.112; pin a
   `graphifyy` version when installing (see host-setup.md) and treat
   `graph.schema_version` as a compat signal.
-- **Python 3.11+ is a new host prerequisite.** jcode itself is Node-only;
+- **Python 3.11+ is a new host prerequisite.** scode itself is Node-only;
   Graphify adds Python + uv to the host setup.

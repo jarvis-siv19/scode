@@ -1,7 +1,7 @@
 /**
  * Phase 5 — the learning loop (handoff §9).
  *
- * `jcode learn` folds the ledger into a report. It answers, from real runs:
+ * `scode learn` folds the ledger into a report. It answers, from real runs:
  * 1. Per (backend, task class): success rate, median time, tokens, quota cost.
  * 2. Token autopsy: mean tokens per (class, backend), tasks retried 3+ times,
  *    and Caveman on vs off per backend.
@@ -127,6 +127,9 @@ export function joinRuns(records: LedgerRecord[]): JoinedRun[] {
   const runs: JoinedRun[] = [];
   for (const record of records) {
     if (record.event !== 'run-finished' || !record.taskId || !record.backend) continue;
+    // A cancelled run is the user stopping the job, not a backend outcome —
+    // counting it as a failure would teach the router the wrong lesson.
+    if (record.errorClass === 'cancelled') continue;
     const start = started.get(`${record.taskId}:${record.backend}`);
     runs.push({
       taskId: record.taskId,
@@ -368,7 +371,7 @@ function tokens(value: number | null): string {
 
 export function renderLearnReport(analysis: LearnAnalysis): string {
   const lines: string[] = [
-    '# jcode learn report',
+    '# scode learn report',
     '',
     `Generated ${analysis.generatedAt}.`,
     '',
@@ -379,7 +382,7 @@ export function renderLearnReport(analysis: LearnAnalysis): string {
     '',
   ];
   if (analysis.totalRuns === 0) {
-    lines.push('No runs in the ledger yet — dispatch some tasks, then run `jcode learn` again.', '');
+    lines.push('No runs in the ledger yet — dispatch some tasks, then run `scode learn` again.', '');
     return lines.join('\n');
   }
   lines.push('## Per backend × task class', '');

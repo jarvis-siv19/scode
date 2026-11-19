@@ -1,9 +1,9 @@
-# jcode steering
+# scode steering
 
-This file is installed by jcode into `.kiro/steering/jcode.md` for jobs that
-run on kiro. It carries the same working rules every jcode backend follows.
+This file is installed by scode into `.kiro/steering/scode.md` for jobs that
+run on kiro. It carries the same working rules every scode backend follows.
 
-- You are running headless under jcode. There is no human watching your
+- You are running headless under scode. There is no human watching your
   output live — write clearly, finish the task, and report what you did and
   what you could not do.
 - Read JCODE_NOTES.md in this repo first if it exists. It carries lessons

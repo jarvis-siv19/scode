@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import type { BackendId, BackendSnapshot } from '../core/types.js';
+import type { TuiTheme } from './theme.js';
 
 /**
  * Parse a reset-time input into an ISO timestamp, or null for unknown.
@@ -22,7 +23,8 @@ export function parseResetInput(input: string, now: Date = new Date()): string |
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
-export function ManualEntry({ backends, onSave, onCancel }: {
+export function ManualEntry({ backends, onSave, onCancel, theme }: {
+  theme: TuiTheme;
   backends: BackendSnapshot[];
   onSave: (backend: BackendId, remainingFraction: number, resetsAt: string | null) => void;
   onCancel: () => void;
@@ -68,14 +70,14 @@ export function ManualEntry({ backends, onSave, onCancel }: {
   };
 
   return (
-    <Box borderStyle="round" borderColor="yellow" flexDirection="column" paddingX={1}>
-      <Text bold color="yellow">Manual quota entry</Text>
+    <Box borderStyle="round" borderColor={theme.border} flexDirection="column" paddingX={1}>
+      <Text bold color={theme.primary}>Manual quota entry</Text>
       <Text dimColor>Probe values replace manual entries when they next succeed. Manual entries age out after 24h.</Text>
       {step === 0 && (
         <Box flexDirection="column">
           <Text>Backend (↑↓ to pick, Enter to continue, Esc to cancel):</Text>
           {eligible.map((item, index) => (
-            <Text key={item.id} color={index === selected ? 'cyan' : undefined}>
+            <Text key={item.id} color={index === selected ? theme.accent : undefined}>
               {index === selected ? '› ' : '  '}{item.id} — {item.status}
             </Text>
           ))}
@@ -93,7 +95,7 @@ export function ManualEntry({ backends, onSave, onCancel }: {
           <TextInput value={reset} onChange={setReset} onSubmit={submitReset} placeholder="e.g. 2h" />
         </Box>
       )}
-      {error && <Text color="red">{error}</Text>}
+      {error && <Text color={theme.error}>{error}</Text>}
     </Box>
   );
 }

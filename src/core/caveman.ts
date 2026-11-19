@@ -2,12 +2,12 @@
  * Phase 3 — Caveman token-efficiency layer (handoff §7).
  *
  * The router spawns the caveman'd CLIs (`caveman codex`, ...) instead of the
- * bare ones, per backend, when enabled. Caveman Auto stays OFF (the router's
- * policy stage does that job locally) and telemetry stays OFF
- * (`DO_NOT_TRACK=1` is set on every wrapped spawn; also run
+ * bare ones, per backend, when enabled. Caveman's native routing is not
+ * configured (the router's policy stage does that job locally), and telemetry
+ * stays OFF (`DO_NOT_TRACK=1` is set on every wrapped spawn; also run
  * `caveman telemetry off` once after install).
  *
- * What jcode takes from Caveman:
+ * What scode takes from Caveman:
  * - Read less: the local proxy compresses tool output before the model reads
  *   it (their number: 33.2% fewer input tokens/session; originals stay on disk).
  * - Say less: concise voice — honest baseline, `/caveman` is only ~3% shorter
@@ -21,7 +21,7 @@
  * checks this per machine.
  *
  * Measurement: every run records `cavemanWrapped` in the ledger, and
- * `jcode learn` (Phase 5) compares tokens on vs off per backend/task class.
+ * `scode learn` (Phase 5) compares tokens on vs off per backend/task class.
  * No measurement is claimed until real runs exist.
  */
 import type { SpawnSpec } from '../adapters/process.js';
@@ -67,7 +67,7 @@ export async function wrapSpawn(
   if (!info.present) {
     if (!warnedMissing) {
       warnedMissing = true;
-      console.error('[jcode] caveman is enabled but not installed — running bare. Install with `npx @caveman-ai/cli@latest`, then `caveman telemetry off`.');
+      console.error('[scode] caveman is enabled but not installed — running bare. Install with `npx @caveman-ai/cli@latest`, then `caveman telemetry off`.');
     }
     return { spec, wrapped: false };
   }

@@ -49,8 +49,9 @@ const AVAILABILITY_PATTERNS = [
 ];
 
 /** Classify a failure from exit code + output tail. Pure — unit-tested. */
-export function classifyFailure(exitCode: number | null, tail: string, timedOut: boolean): ErrorClass | null {
+export function classifyFailure(exitCode: number | null, tail: string, timedOut: boolean, cancelled = false): ErrorClass | null {
   if (timedOut) return 'timeout';
+  if (cancelled) return 'cancelled';
   if (exitCode === 0 || exitCode === null) return null;
   const text = tail.toLowerCase();
   if (QUOTA_PATTERNS.some((pattern) => text.includes(pattern))) return 'quota';
@@ -62,7 +63,7 @@ export function classifyFailure(exitCode: number | null, tail: string, timedOut:
 /** Pull a session id out of parsed events (vendor key names differ). */
 export function extractSessionId(events: StreamEvent[]): string | undefined {
   for (const { raw } of events) {
-    for (const key of ['session_id', 'sessionId', 'thread_id', 'threadId', 'conversation_id', 'conversationId', 'resume_id']) {
+    for (const key of ['session_id', 'sessionId', 'sessionID', 'thread_id', 'threadId', 'conversation_id', 'conversationId', 'resume_id']) {
       const value = raw[key];
       if (typeof value === 'string' && value) return value;
     }
@@ -84,7 +85,8 @@ export function extractSessionId(events: StreamEvent[]): string | undefined {
 export function extractUsage(events: StreamEvent[]): RunUsage | undefined {
   let usage: RunUsage | undefined;
   for (const { raw } of events) {
-    const candidates = [raw, raw.usage, (raw.result as Record<string, unknown> | undefined)?.usage];
+    const part = raw.part as Record<string, unknown> | undefined;
+    const candidates = [raw, raw.usage, part?.tokens, (raw.result as Record<string, unknown> | undefined)?.usage];
     for (const candidate of candidates) {
       if (typeof candidate !== 'object' || candidate === null) continue;
       const u = candidate as Record<string, unknown>;
@@ -93,6 +95,8 @@ export function extractUsage(events: StreamEvent[]): RunUsage | undefined {
       if (typeof u.output_tokens === 'number') found.outputTokens = u.output_tokens;
       if (typeof u.inputTokens === 'number') found.inputTokens = u.inputTokens;
       if (typeof u.outputTokens === 'number') found.outputTokens = u.outputTokens;
+      if (typeof u.input === 'number') found.inputTokens = u.input;
+      if (typeof u.output === 'number') found.outputTokens = u.output;
       if (typeof u.total_cost_usd === 'number') found.totalCostUsd = u.total_cost_usd;
       if (typeof u.premiumRequests === 'number') found.premiumRequests = u.premiumRequests;
       if (typeof u.premium_requests === 'number') found.premiumRequests = u.premium_requests;
@@ -100,6 +104,40 @@ export function extractUsage(events: StreamEvent[]): RunUsage | undefined {
     }
   }
   return usage;
+}
+
+function textFromContent(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (!Array.isArray(value)) return undefined;
+  const parts = value.flatMap((item) => {
+    if (typeof item === 'string') return [item];
+    if (typeof item !== 'object' || item === null) return [];
+    const record = item as Record<string, unknown>;
+    return typeof record.text === 'string' ? [record.text] : [];
+  }).filter((part) => part.trim());
+  return parts.length > 0 ? parts.join('\n').trim() : undefined;
+}
+
+/** Extract only user-facing assistant prose, never JSON protocol/log events. */
+export function extractDisplayText(raw: Record<string, unknown>): string | undefined {
+  const item = typeof raw.item === 'object' && raw.item !== null ? raw.item as Record<string, unknown> : undefined;
+  if (item && ['agent_message', 'assistant_message', 'message'].includes(String(item.type ?? ''))) {
+    return textFromContent(item.text ?? item.content ?? item.message);
+  }
+  const part = typeof raw.part === 'object' && raw.part !== null ? raw.part as Record<string, unknown> : undefined;
+  if (part && ['text', 'assistant', 'message'].includes(String(part.type ?? ''))) {
+    return textFromContent(part.text ?? part.content);
+  }
+  const type = String(raw.type ?? '').toLowerCase();
+  if (['result', 'assistant', 'assistant_message', 'message', 'text'].includes(type)) {
+    const direct = textFromContent(raw.result ?? raw.text ?? raw.content ?? raw.message);
+    if (direct) return direct;
+  }
+  const message = typeof raw.message === 'object' && raw.message !== null ? raw.message as Record<string, unknown> : undefined;
+  if (message && String(message.role ?? '').toLowerCase() === 'assistant') {
+    return textFromContent(message.content ?? message.text);
+  }
+  return undefined;
 }
 
 export function runProcess(spec: SpawnSpec, request: RunRequest, callbacks: ProcessCallbacks): Promise<RunResult> {
@@ -127,6 +165,21 @@ export function runProcess(spec: SpawnSpec, request: RunRequest, callbacks: Proc
     });
   }
 
+  if (request.signal?.aborted) {
+    const finished = Date.now();
+    return Promise.resolve({
+      taskId: request.taskId,
+      backend: request.backend,
+      startedAt,
+      finishedAt: new Date(finished).toISOString(),
+      durationMs: finished - started,
+      exitCode: null,
+      signal: null,
+      success: false,
+      errorClass: 'cancelled',
+    });
+  }
+
   return new Promise((resolve, reject) => {
     const child = spawn(spec.command, spec.args, {
       cwd: request.cwd,
@@ -135,13 +188,33 @@ export function runProcess(spec: SpawnSpec, request: RunRequest, callbacks: Proc
       windowsHide: true,
     });
     // Headless vendor CLIs may interpret an open pipe as more prompt input.
-    // jcode passes the complete brief in argv, so close stdin immediately.
+    // scode passes the complete brief in argv, so close stdin immediately.
     child.stdin.end();
 
     let timedOut = false;
+    let cancelled = false;
     let tail = '';
     let lineBuffer = '';
     const events: StreamEvent[] = [];
+    let timer: NodeJS.Timeout | undefined;
+    let killTimer: NodeJS.Timeout | undefined;
+    const cleanup = () => {
+      if (timer) clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
+      request.signal?.removeEventListener('abort', onAbort);
+    };
+    const terminate = () => {
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      child.kill('SIGTERM');
+      killTimer = setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      }, KILL_GRACE_MS);
+      killTimer.unref();
+    };
+    const onAbort = () => {
+      cancelled = true;
+      terminate();
+    };
     const pushTail = (chunk: string) => {
       tail = `${tail}${chunk}`.slice(-TAIL_BYTES);
     };
@@ -156,6 +229,8 @@ export function runProcess(spec: SpawnSpec, request: RunRequest, callbacks: Proc
             const parsed = JSON.parse(line) as Record<string, unknown>;
             events.push({ raw: parsed });
             callbacks.onEvent?.({ raw: parsed });
+            const display = extractDisplayText(parsed);
+            if (display) callbacks.onDisplay?.(display);
           } catch {
             // Not JSON — plain output line, ignore for events.
           }
@@ -175,22 +250,26 @@ export function runProcess(spec: SpawnSpec, request: RunRequest, callbacks: Proc
       callbacks.onStderr(text);
       pushTail(text);
     });
-    child.on('error', reject);
+    child.on('error', (error) => {
+      cleanup();
+      reject(error);
+    });
 
-    const timer = setTimeout(() => {
+    if (request.signal) {
+      request.signal.addEventListener('abort', onAbort, { once: true });
+      if (request.signal.aborted) onAbort();
+    }
+
+    timer = setTimeout(() => {
       timedOut = true;
-      child.kill('SIGTERM');
-      // Escalate: a wedged vendor CLI must not outlive the timeout.
-      setTimeout(() => {
-        if (!child.killed) child.kill('SIGKILL');
-      }, KILL_GRACE_MS).unref();
+      terminate();
     }, request.timeoutMs);
     timer.unref();
 
     child.on('close', (exitCode, signal) => {
-      clearTimeout(timer);
+      cleanup();
       const finished = Date.now();
-      const errorClass = classifyFailure(exitCode, tail, timedOut);
+      const errorClass = classifyFailure(exitCode, tail, timedOut, cancelled);
       resolve({
         taskId: request.taskId,
         backend: request.backend,
@@ -199,7 +278,7 @@ export function runProcess(spec: SpawnSpec, request: RunRequest, callbacks: Proc
         durationMs: finished - started,
         exitCode,
         signal,
-        success: exitCode === 0 && !timedOut,
+        success: exitCode === 0 && !timedOut && !cancelled,
         errorClass,
         sessionId: extractSessionId(events),
         usage: extractUsage(events),

@@ -33,8 +33,26 @@ test('claude: refuses to run while disabled (config off)', async () => {
   });
 });
 
-test('claude: refuses to run while disabled (env off)', async () => {
+test('claude: config alone enables a configured account', async () => {
   await withTempHome({ claudeEnabled: true }, undefined, async () => {
+    const adapter = new ClaudeAdapter();
+    const lines: string[] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => { lines.push(args.join(' ')); };
+    try {
+      await adapter.run(
+        { taskId: 't', brief: 'x', backend: 'claude', cwd: '/tmp', timeoutMs: 1000, dryRun: true },
+        {},
+      );
+    } finally {
+      console.log = originalLog;
+    }
+    assert.ok(lines.some((line) => line.startsWith('[dry-run] claude -p')));
+  });
+});
+
+test('claude: explicit environment false disables config', async () => {
+  await withTempHome({ claudeEnabled: true }, 'false', async () => {
     const adapter = new ClaudeAdapter();
     await assert.rejects(
       adapter.run({ taskId: 't', brief: 'x', backend: 'claude', cwd: '/tmp', timeoutMs: 1000, dryRun: true }, {}),

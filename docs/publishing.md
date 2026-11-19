@@ -1,52 +1,44 @@
-# Publishing jcode to npm
+# Publishing scode to npm
 
-jcode is TypeScript on Node, so npm is its home. There is no PyPI package:
-PyPI is for Python, and jcode has no Python in it. A PyPI shim that
+scode is TypeScript on Node, so npm is its home. There is no PyPI package:
+PyPI is for Python, and scode has no Python in it. A PyPI shim that
 downloaded the Node build would only confuse installs — one registry, npm.
 
 ## Name
 
-`jcode` is taken on npm (an unrelated 0.0.0 MVC framework stub from 2019,
-owned by Johnny Bakker — asking him for a voluntary transfer is allowed,
-but npm will not force one). The package is `scode` (available as of
-Nov 18, 2026) and the installed binary is still `jcode`:
+The npm package is `@sivab193/scode`. The primary executable is `scode`;
+`jcode` remains available as a compatibility alias.
 
 ```sh
-npm install -g scode   # installs the `jcode` command
-npx -y scode           # run without installing
+npm install
+npm run build
+npm link               # installs the local `scode` command
 ```
 
-Other names checked free on Nov 18, 2026: `jcode-cli`, `s19code`, `s19c`.
-Switching is one line in `package.json` (`"name"`) plus the README install
-commands.
+## One-time setup
 
-## First publish (manual, once)
+Configure npm Trusted Publishing for `@sivab193/scode`, selecting the GitHub
+repository `sivab193/scode` and the `release.yml` workflow. Allow direct
+`npm publish`; npm's default for new trusted publishers may allow only staged
+publishing. The workflow uses OIDC and npm provenance, so no npm token or
+GitHub secret is needed. Complete a successful publish within two days of
+creating the trusted publisher, or npm will require you to recreate it.
 
-1. Create an npm account (npmjs.com) with 2FA enabled. Any username works
-   now — `scode` is unscoped, so no scope ownership is needed.
-2. `npm login` on the machine doing the publish.
-3. From the repo root: `npm test` (must be green), then `npm publish`.
-   Unscoped packages are public by default; `publishConfig.access` in
-   `package.json` already sets it explicitly.
-4. Verify from a clean machine: `npx -y scode status` should print
-   the backend table without cloning the repo.
+## Publishing a release
 
-## Releases after that (automated)
-
-Push a tag and the release workflow publishes it:
+Update the package version and create a matching tag:
 
 ```sh
-npm version patch   # or minor / major — bumps package.json, tags v0.1.1
-git push origin main --tags
+npm version patch
+git push origin main --follow-tags
+gh release create v0.1.1 --generate-notes --verify-tag
 ```
 
-`.github/workflows/release.yml` runs on tags matching `v*`: it runs the
-tests, builds, and publishes with npm provenance
-(`--provenance`, tying the tarball to the GitHub run). It needs one repo
-secret: `NODE_AUTH_TOKEN` — an npm automation token (npmjs.com > Access
-Tokens > Granular, scoped to `scode`, or classic with publish
-rights). Without the secret the workflow fails at the publish step and
-nothing ships, which is the safe failure.
+Replace `v0.1.1` with the tag created by `npm version`. Publishing the GitHub
+Release triggers the workflow, which checks that the tag matches
+`package.json`, runs the tests, and publishes to npm. You can also create the
+release in GitHub's UI; `.github/release_template.md` supplies the description
+template and `.github/release.yml` groups generated notes.
 
 ## What ships in the tarball
 

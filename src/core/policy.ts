@@ -22,6 +22,26 @@ const PREFERENCES: Record<Classification['taskClass'], BackendId[]> = {
   general: ['codex-a', 'codex-b', 'opencode'],
 };
 
+export function backendCandidatePool(
+  classification: Classification,
+  snapshots: BackendSnapshot[],
+  quotaFloor = 0.1,
+): BackendSnapshot[] {
+  const byId = new Map(snapshots.map((item) => [item.id, item]));
+  const preferred = PREFERENCES[classification.taskClass]
+    .map((id) => byId.get(id))
+    .filter((item): item is BackendSnapshot => !!item && item.status === 'available');
+  const aboveFloor = preferred.filter((item) =>
+    item.quota.remainingFraction === null || item.quota.remainingFraction >= quotaFloor);
+  return aboveFloor.length > 0 ? aboveFloor : preferred;
+}
+
+export function backendPreferenceClasses(backend: BackendId): string[] {
+  return Object.entries(PREFERENCES)
+    .filter(([, preferences]) => preferences.includes(backend))
+    .map(([taskClass]) => taskClass);
+}
+
 export interface PolicyOptions {
   /** Never pick an account below this remaining fraction unless it is the only option. */
   quotaFloor?: number;
@@ -58,14 +78,6 @@ export function selectBackend(
   }
 
   const preferred = PREFERENCES[classification.taskClass];
-  const eligible = (ids: BackendId[]) =>
-    ids
-      .map((id) => byId.get(id))
-      .filter((item): item is BackendSnapshot => !!item && item.status === 'available');
-
-  // Above-floor candidates first; below-floor only as a last resort.
-  const aboveFloor = (items: BackendSnapshot[]) =>
-    items.filter((item) => item.quota.remainingFraction === null || item.quota.remainingFraction >= floor);
 
   const orderByExpiry = (items: BackendSnapshot[]) =>
     [...items].sort((a, b) => {
@@ -78,9 +90,7 @@ export function selectBackend(
       return aRem - bRem;
     });
 
-  const candidates = eligible(preferred);
-  const withHeadroom = aboveFloor(candidates);
-  const pool = withHeadroom.length > 0 ? withHeadroom : candidates;
+  const pool = backendCandidatePool(classification, snapshots, floor);
 
   // Phase 6: measured priors rank the pick by expected cost. Scoring only
   // applies when at least one candidate is measured (>= 20 runs); otherwise
@@ -120,5 +130,5 @@ export function selectBackend(
   if (anyAvailable.length > 0) {
     return { backend: anyAvailable[0].id, reason: `${classification.reason}; no preferred backend available, using ${anyAvailable[0].id}` };
   }
-  throw new Error('No backend is available (all disabled, unavailable, or cooling down). Run `jcode doctor` to check this machine.');
+  throw new Error('No backend is available (all disabled, unavailable, or cooling down). Run `scode doctor` to check this machine.');
 }

@@ -1,5 +1,5 @@
 /**
- * Phase 4 — `jcode tools install`: write the jcode-tools MCP server entry
+ * Phase 4 — `scode tools install`: write the jcode-tools MCP server entry
  * into each backend's config file, non-destructively (existing servers are
  * preserved; only the jcode-tools entry is added or replaced).
  *
@@ -65,7 +65,7 @@ export function mergeJsonMcpServers(
  */
 export function mergeCodexToml(existingText: string | null, command: string, args: string[]): string {
   const section = [
-    `# jcode-tools MCP server (managed by \`jcode tools install\`)`,
+    `# jcode-tools MCP server (managed by \`scode tools install\`)`,
     `[mcp_servers.${SERVER_NAME}]`,
     `command = ${JSON.stringify(command)}`,
     `args = ${JSON.stringify(args)}`,

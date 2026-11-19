@@ -1,15 +1,16 @@
-# Host setup (Windows laptop)
+# Host setup (macOS)
 
-jcode is local-first: it runs on the machine where the coding CLIs are
-installed and logged in. This is that machine's setup guide. Nothing here
-needs a server, a paid API key, or a token handed to anyone — every adapter
-spawns the official CLI, which keeps its own login.
+scode runs on the machine where the coding CLIs are installed and logged in.
+When Bivia is configured, scode sends the task brief and available-backend
+summaries to its decision API; without Bivia, routing uses local rules. In
+either case, adapters launch the official coding CLIs, which keep their own
+logins. See [Bivia routing](bivia-routing.md) for details.
 
 ## 1. Prereqs
 
-- Node.js 20+ (`node --version`)
+- Node.js 22+ (`node --version`)
 - git
-- A terminal that supports Ink (Windows Terminal is fine)
+- A terminal that supports Ink (Terminal and iTerm2 are both fine)
 - Python 3.11+ (for the Graphify code graph — optional; everything else
   works without it, the graph features just skip silently)
 
@@ -26,8 +27,8 @@ spawns the official CLI, which keeps its own login.
 
 Optional, for the code graph (see docs/graphify.md):
 
-```powershell
-winget install astral-sh.uv
+```sh
+brew install uv
 uv tool install "graphifyy[mcp]"     # pin a version in production, e.g. graphifyy==0.9.112
 graphify --version                   # verify it is on PATH
 ```
@@ -35,26 +36,26 @@ graphify --version                   # verify it is on PATH
 ## 3. Two Codex accounts, two homes
 
 One login per `CODEX_HOME` — this is the clean official path, and it is why
-jcode treats codex-a and codex-b as separate quota pools.
+scode treats codex-a and codex-b as separate quota pools.
 
-```powershell
-$env:CODEX_HOME = "$env:USERPROFILE\.codex-a"; codex login   # account A
-$env:CODEX_HOME = "$env:USERPROFILE\.codex-b"; codex login   # account B
+```sh
+CODEX_HOME="$HOME/.codex-a" codex login   # account A
+CODEX_HOME="$HOME/.codex-b" codex login   # account B
 ```
 
-Then point jcode at them in `%USERPROFILE%\.jcode\config.json`
+Then point scode at them in `~/.jcode/config.json`
 (see `config.example.json` in the repo):
 
 ```json
-{ "codexHomes": { "a": "C:\\Users\\you\\.codex-a", "b": "C:\\Users\\you\\.codex-b" } }
+{ "codexHomes": { "a": "/Users/you/.codex-a", "b": "/Users/you/.codex-b" } }
 ```
 
-If codex-b has no home configured, jcode reports it unavailable rather than
+If codex-b has no home configured, scode reports it unavailable rather than
 silently sharing account A's login.
 
 ## 4. Config
 
-Copy `config.example.json` to `%USERPROFILE%\.jcode\config.json` and edit it.
+Copy `config.example.json` to `~/.jcode/config.json` and edit it.
 The fields:
 
 - `quotaFloor` (0.1) — backends below this remaining fraction are skipped
@@ -73,7 +74,7 @@ The fields:
 
 Environment variables (all optional):
 
-- `JCODE_HOME` — state dir (default `%USERPROFILE%\.jcode`).
+- `JCODE_HOME` — state dir (default `~/.jcode`).
 - `JCODE_CODEX_A_HOME` / `JCODE_CODEX_B_HOME` — same as `codexHomes`.
 - `JCODE_OPENCODE_ATTACH` — attach to a warm `opencode serve`.
 - `JCODE_CAVEMAN=true` — enable the Caveman layer.
@@ -82,18 +83,18 @@ Environment variables (all optional):
 
 ## 5. Verify
 
-```powershell
+```sh
 npm ci
-npm test          # expect all tests green (95 at last count)
-jcode doctor      # Phase 0 gate — see docs/codex-local-testing.md
-jcode tools install   # wire the jcode-tools MCP server into the backends
+npm test          # expect all 129 tests green
+scode doctor      # Phase 0 gate — see docs/codex-local-testing.md
+scode tools install   # wire the jcode-tools MCP server into the backends
 ```
 
 ## 6. Weekly habit
 
-Run `jcode learn` once a week. It writes the report to
-`%USERPROFILE%\.jcode\learn-report.md` and appends the fold to
-`%USERPROFILE%\.jcode\lessons.md`. Proposals are presented, never
+Run `scode learn` once a week. It writes the report to
+`~/.jcode/learn-report.md` and appends the fold to
+`~/.jcode/lessons.md`. Proposals are presented, never
 auto-applied — read them, then change `config.json` by hand if you agree.
 
 ## Decisions still open

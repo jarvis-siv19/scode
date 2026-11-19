@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   bar,
   computeTokenStats,
+  formatCompactTokens,
   formatTokens,
   renderTokenDashboard,
 } from '../dist/core/tokenStats.js';
@@ -129,4 +130,10 @@ test('tokens: format and dashboard lines', () => {
   assert.ok(lines[1].startsWith('Last 7 days: 150 tokens'));
   assert.ok(lines.some((line) => line.includes('Per backend (7 days)')));
   assert.ok(lines.some((line) => line.includes('Daily (7 days)')));
+});
+
+test('tokens: compact home-screen totals stay readable', () => {
+  assert.equal(formatCompactTokens(0), '0');
+  assert.equal(formatCompactTokens(39_207), '39.2K');
+  assert.equal(formatCompactTokens(1_250_000), '1.3M');
 });

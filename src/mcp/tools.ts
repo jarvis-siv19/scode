@@ -1,5 +1,5 @@
 /**
- * Phase 4 — the jcode MCP tool suite (handoff §8).
+ * Phase 4 — the scode MCP tool suite (handoff §8).
  *
  * One server, `jcode-tools`, exposing the three tools the handoff ships first:
  * pdf-read, latex-build, file-peek — plus graph-query, added for the Graphify
@@ -19,21 +19,26 @@ import { access, readFile, stat } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { z } from 'zod';
 import { graphJsonPath, readGraphMeta, resolveMainCheckout, runGraphQuery, type GraphQueryKind } from '../core/graphify.js';
+import { renderDiffSummary, threadDiff } from '../core/pr.js';
 import { cliInfo } from '../core/probes.js';
+import { findThread, loadThreads, renderThreadList, renderThreadStatus } from '../core/threads.js';
 
 export interface ToolResult {
   text: string;
   isError: boolean;
 }
 
-export const TOOL_NAMES = ['file-peek', 'pdf-read', 'latex-build', 'graph-query'] as const;
+export const TOOL_NAMES = ['file-peek', 'pdf-read', 'latex-build', 'graph-query', 'thread-list', 'thread-status', 'thread-diff'] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
 
 export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   'file-peek': 'Read a slice of a text file by line number, with line numbers. Use this instead of reading a whole file when you only need part of it.',
   'pdf-read': 'Extract text from a PDF, optionally limited to a page range. Returns plain text; output is capped.',
   'latex-build': 'Compile a LaTeX document to PDF (latexmk when available, else two pdflatex passes). Returns the PDF path on success, or the log tail on failure.',
-  'graph-query': 'Query the repo code graph (Graphify) instead of grepping for structure: who calls X, what depends on Y, the impact of a change, the most-connected modules. Returns budgeted graph results with file+line. The graph lives at graphify-out/graph.json in the repo root; if it is missing, say so and suggest `jcode graph init`. Never read graph.json directly — always query it through this tool.',
+  'graph-query': 'Query the repo code graph (Graphify) instead of grepping for structure: who calls X, what depends on Y, the impact of a change, the most-connected modules. Returns budgeted graph results with file+line. The graph lives at graphify-out/graph.json in the repo root; if it is missing, say so and suggest `scode graph init`. Never read graph.json directly — always query it through this tool.',
+  'thread-list': 'List scode threads (durable tasks, each with its own branch, worktree, and backend session): id, title, backend, turns, branch, PR link when one exists.',
+  'thread-status': 'Show one thread: branch, base, worktree, backend, turns, and its change summary vs the base branch.',
+  'thread-diff': 'Show one thread\'s change vs its base branch: file stats plus the unified diff (capped). Use this to review a thread before shipping it.',
 };
 
 /** Zod input shapes — the MCP SDK converts these to JSON Schema for tools/list. */
@@ -59,6 +64,13 @@ export const TOOL_INPUT_SHAPES = {
     target: z.string().optional().describe('End symbol, for kind "path" only.'),
     budget: z.number().int().optional().describe('Token budget for the answer. Default 2000.'),
     depth: z.number().int().optional().describe('Traversal depth, 1-6. Default 2.'),
+  },
+  'thread-list': {},
+  'thread-status': {
+    threadId: z.string().describe('Thread id (or unique prefix). See thread-list.'),
+  },
+  'thread-diff': {
+    threadId: z.string().describe('Thread id (or unique prefix). See thread-list.'),
   },
 };
 
@@ -163,17 +175,27 @@ const MAX_GRAPH_CHARS = 8000;
 
 /**
  * Query the code graph for the repo the agent is working in. The server runs
- * with the agent's cwd, which may be a jcode worktree — resolveMainCheckout
+ * with the agent's cwd, which may be a scode worktree — resolveMainCheckout
  * walks to the main checkout, where the graph lives.
  */
-export async function queryGraphTool(args: { kind?: GraphQueryKind; question?: string; target?: string; budget?: number; depth?: number }): Promise<ToolResult> {
+export async function queryGraphTool(
+  args: { kind?: GraphQueryKind; question?: string; target?: string; budget?: number; depth?: number },
+  runtime: { binary?: string; binaryArgs?: string[] } = {},
+): Promise<ToolResult> {
   const kind = args.kind ?? 'query';
   const repoPath = await resolveMainCheckout(process.cwd());
   const meta = await readGraphMeta(repoPath);
   if (!meta) {
-    return error(`graph-query: no code graph at ${graphJsonPath(repoPath)}. Run \`jcode graph init\` in the repo root (or wait for the next jcode dispatch, which builds it automatically when graphify is installed).`);
+    return error(`graph-query: no code graph at ${graphJsonPath(repoPath)}. Run \`scode graph init\` in the repo root (or wait for the next scode dispatch, which builds it automatically when graphify is installed).`);
   }
-  const result = await runGraphQuery(repoPath, kind, { question: args.question, target: args.target, budget: args.budget, depth: args.depth });
+  const result = await runGraphQuery(repoPath, kind, {
+    question: args.question,
+    target: args.target,
+    budget: args.budget,
+    depth: args.depth,
+    binary: runtime.binary,
+    binaryArgs: runtime.binaryArgs,
+  });
   if (!result.ok) return error(`graph-query: ${result.text}`);
   const text = result.text;
   if (text.length > MAX_GRAPH_CHARS) {
@@ -182,12 +204,50 @@ export async function queryGraphTool(args: { kind?: GraphQueryKind; question?: s
   return { text, isError: false };
 }
 
+export async function listThreadsTool(): Promise<ToolResult> {
+  const threads = await loadThreads();
+  return { text: renderThreadList(threads).join('\n'), isError: false };
+}
+
+export async function threadStatusTool(args: { threadId: string }): Promise<ToolResult> {
+  try {
+    const thread = findThread(await loadThreads(), args.threadId);
+    const diff = await threadDiff(thread);
+    const lines = [...renderThreadStatus(thread), '', ...renderDiffSummary(diff, thread).slice(2)];
+    return { text: lines.join('\n'), isError: false };
+  } catch (caught) {
+    return error(caught instanceof Error ? caught.message : String(caught));
+  }
+}
+
+const MAX_TOOL_DIFF_CHARS = 8000;
+
+export async function threadDiffTool(args: { threadId: string }): Promise<ToolResult> {
+  try {
+    const thread = findThread(await loadThreads(), args.threadId);
+    const diff = await threadDiff(thread);
+    const lines = renderDiffSummary(diff, thread);
+    if (diff.diffText) {
+      const text = diff.diffText.length > MAX_TOOL_DIFF_CHARS
+        ? `${diff.diffText.slice(0, MAX_TOOL_DIFF_CHARS)}\n… (truncated; run \`scode diff ${thread.id}\` for the full diff)`
+        : diff.diffText;
+      lines.push('', text);
+    }
+    return { text: lines.join('\n'), isError: false };
+  } catch (caught) {
+    return error(caught instanceof Error ? caught.message : String(caught));
+  }
+}
+
 export async function callTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
   switch (name) {
     case 'file-peek': return peekFile(args as { path: string; startLine?: number; endLine?: number });
     case 'pdf-read': return readPdf(args as { path: string; startPage?: number; endPage?: number; maxChars?: number });
     case 'latex-build': return buildLatex(args as { path: string; outDir?: string });
     case 'graph-query': return queryGraphTool(args as { kind?: GraphQueryKind; question?: string; target?: string; budget?: number; depth?: number });
+    case 'thread-list': return listThreadsTool();
+    case 'thread-status': return threadStatusTool(args as { threadId: string });
+    case 'thread-diff': return threadDiffTool(args as { threadId: string });
     default: return error(`Unknown tool: ${name}`);
   }
 }

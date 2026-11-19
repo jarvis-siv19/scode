@@ -1,13 +1,22 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { THEME_IDS, type BackendId, type ThemeId } from './core/types.js';
+
+export interface BackendProfile {
+  label?: string;
+  account?: string;
+}
 
 export interface JcodeConfig {
   quotaFloor: number;
   defaultTimeoutMs: number;
   claudeEnabled: boolean;
+  theme: ThemeId;
   codexHomes: { a?: string; b?: string };
   opencodeModel: string;
+  /** Local display metadata only. Never used as a credential. */
+  backendProfiles?: Partial<Record<BackendId, BackendProfile>>;
   /** Attach to a warm `opencode serve` to avoid MCP cold-boot. */
   opencodeAttachUrl?: string;
   /** Cap Copilot autonomous steps per run (premium-request budget). */
@@ -40,6 +49,7 @@ const defaults: JcodeConfig = {
   quotaFloor: 0.1,
   defaultTimeoutMs: 30 * 60 * 1000,
   claudeEnabled: false,
+  theme: 'ember',
   codexHomes: {},
   opencodeModel: 'opencode/big-pickle',
 };
@@ -56,18 +66,26 @@ export const statePaths = () => ({
   lessons: join(stateHome(), 'lessons.md'),
   /** Per-task session ids, keyed by task id then backend (handoff §5). */
   sessions: join(stateHome(), 'sessions.json'),
-  /** Last `jcode doctor` result (Phase 0 gate record). */
+  /** Resumable task metadata for `scode session list|attach`. */
+  runs: join(stateHome(), 'runs.json'),
+  /** Last `scode doctor` result (Phase 0 gate record). */
   smoke: join(stateHome(), 'smoke.json'),
-  /** Last `jcode learn` report (Phase 5). */
+  /** Last `scode learn` report (Phase 5). */
   learnReport: join(stateHome(), 'learn-report.md'),
   /** MCP tool-call log, for the Phase 5 dead-tool check. */
   toolCalls: join(stateHome(), 'tool-calls.jsonl'),
   /** Scheduled jobs (cron + one-shot). */
   schedules: join(stateHome(), 'schedules.json'),
+  /** Threads (T3-style: one branch + worktree + session per thread). */
+  threads: join(stateHome(), 'threads.json'),
 });
 
 export async function ensureStateHome(): Promise<void> {
   await mkdir(stateHome(), { recursive: true });
+}
+
+function isThemeId(value: unknown): value is ThemeId {
+  return typeof value === 'string' && THEME_IDS.some((theme) => theme === value);
 }
 
 export async function loadConfig(): Promise<JcodeConfig> {
@@ -78,13 +96,19 @@ export async function loadConfig(): Promise<JcodeConfig> {
     fromDisk = JSON.parse(await readFile(paths.config, 'utf8')) as Partial<JcodeConfig>;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    await writeFile(paths.config, `${JSON.stringify(defaults, null, 2)}\n`, { flag: 'wx' }).catch(() => undefined);
+    // Missing config means defaults. Do not create it while reading: multiple
+    // concurrent CLI/test processes could otherwise observe a partially
+    // written JSON file on first launch.
   }
 
   return {
     ...defaults,
     ...fromDisk,
-    claudeEnabled: process.env.JCODE_CLAUDE_ENABLED === 'true' && fromDisk.claudeEnabled === true,
+    theme: isThemeId(fromDisk.theme) ? fromDisk.theme : defaults.theme,
+    claudeEnabled:
+      process.env.JCODE_CLAUDE_ENABLED === 'false'
+        ? false
+        : fromDisk.claudeEnabled === true,
     codexHomes: {
       ...defaults.codexHomes,
       ...fromDisk.codexHomes,
@@ -102,4 +126,51 @@ export async function loadConfig(): Promise<JcodeConfig> {
       autoBuild: fromDisk.graphify?.autoBuild ?? true,
     },
   };
+}
+
+export async function setTheme(theme: ThemeId): Promise<void> {
+  await updateConfig({ theme });
+}
+
+/** Atomically merge top-level config fields while preserving unknown settings. */
+export async function updateConfig(patch: Partial<JcodeConfig>): Promise<void> {
+  await ensureStateHome();
+  const { config } = statePaths();
+  let current: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = JSON.parse(await readFile(config, 'utf8'));
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      throw new Error(`Invalid config object in ${config}`);
+    }
+    current = parsed as Record<string, unknown>;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  const temporary = `${config}.${process.pid}.tmp`;
+  await writeFile(temporary, `${JSON.stringify({ ...current, ...patch }, null, 2)}\n`, { mode: 0o600 });
+  await rename(temporary, config);
+}
+
+export async function setBackendProfile(id: BackendId, profile: BackendProfile): Promise<void> {
+  const config = await loadConfig();
+  await updateConfig({
+    backendProfiles: {
+      ...config.backendProfiles,
+      [id]: {
+        ...config.backendProfiles?.[id],
+        ...profile,
+      },
+    },
+  });
+}
+
+export async function setOpenCodeModel(model: string): Promise<void> {
+  const normalized = model === 'free' ? defaults.opencodeModel : model.trim();
+  if (!normalized) throw new Error('OpenCode model cannot be empty');
+  await updateConfig({ opencodeModel: normalized });
+}
+
+export async function setCodexHome(account: 'a' | 'b', path: string): Promise<void> {
+  const config = await loadConfig();
+  await updateConfig({ codexHomes: { ...config.codexHomes, [account]: resolve(path) } });
 }
