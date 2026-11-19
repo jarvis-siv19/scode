@@ -8,7 +8,7 @@ import { routeTask } from '../core/router.js';
 import { loadSchedules, runDueSchedules } from '../core/schedules.js';
 import { getPriors } from '../core/scoring.js';
 import { attachRun } from '../core/runs.js';
-import { computeTokenStats, type TokenStats } from '../core/tokenStats.js';
+import { computeTokenStats, formatCompactTokens, type TokenStats } from '../core/tokenStats.js';
 import { BACKEND_IDS, type BackendId, type BackendSnapshot, type ThemeId } from '../core/types.js';
 import { BackendsPane } from './BackendsPane.js';
 import { BackendEditor, type BackendEdit } from './BackendEditor.js';
@@ -24,6 +24,11 @@ type Focus = 'task' | 'backends' | 'jobs';
 
 /** Override cycle: auto, then each backend in order. */
 export const OVERRIDE_OPTIONS: Array<BackendId | undefined> = [undefined, ...BACKEND_IDS];
+
+/** Tiny social prompts should not pay the coding-task worktree/indexing cost. */
+export function isConversationalBrief(brief: string): boolean {
+  return /^(?:hi|hello|hey|yo|howdy|good\s+(?:morning|afternoon|evening)|how\s+are\s+you|thanks|thank\s+you)[\s!,.?]*$/i.test(brief.trim());
+}
 
 export function App() {
   const { exit } = useApp();
@@ -44,6 +49,7 @@ export function App() {
 
   const override = OVERRIDE_OPTIONS[overrideIndex];
   const theme = THEMES[themeId];
+  const displayedTokenStats = tokenStats ?? computeTokenStats([], new Date());
   const orderedJobs = [...jobs].sort((a, b) => Number(b.state === 'running' || b.state === 'stopping') - Number(a.state === 'running' || a.state === 'stopping'));
   const selectedJobIndex = orderedJobs.findIndex((job) => job.id === selectedJobId);
   const startIndex = Math.max(0, Math.min(
@@ -281,6 +287,8 @@ export function App() {
 
   const submit = async (brief: string) => {
     if (!brief.trim()) return;
+    const effectiveInteractionMode = interactionMode === 'task' && isConversationalBrief(brief) ? 'chat' : interactionMode;
+    if (effectiveInteractionMode !== interactionMode) setInteractionMode(effectiveInteractionMode);
     const priors = await getPriors();
     let classification;
     let selection;
@@ -291,19 +299,19 @@ export function App() {
       return;
     }
     const id = `${Date.now()}`;
-    const dispatchTaskId = interactionMode === 'chat'
+    const dispatchTaskId = effectiveInteractionMode === 'chat'
       ? `chat-${selection.backend}-${Buffer.from(process.cwd()).toString('base64url').slice(-12)}`
       : id;
     const controller = new AbortController();
     controllersRef.current.set(id, controller);
     setJobs((current) => [{
-      id, taskId: dispatchTaskId, brief, backend: selection.backend, state: 'running', interactionMode,
+      id, taskId: dispatchTaskId, brief, backend: selection.backend, state: 'running', interactionMode: effectiveInteractionMode,
       startedAt: Date.now(), outputTail: [],
     }, ...current]);
     setSelectedJobId(id);
     setFocus('jobs');
     setTask('');
-    setMessage(`Running on ${selection.backend}: ${selection.reason}`);
+    setMessage(`${effectiveInteractionMode === 'chat' ? 'Chatting' : 'Running'} on ${selection.backend}: ${selection.reason}`);
     try {
       const result = await dispatch({
         brief,
@@ -313,7 +321,7 @@ export function App() {
         classification: { ...classification },
         allowFallback: true,
         signal: controller.signal,
-        interactionMode,
+        interactionMode: effectiveInteractionMode,
         onStdout: () => {},
         onStderr: () => {},
         onDisplay: (text) => appendOutput(id, text),
@@ -371,10 +379,10 @@ export function App() {
       backgroundColor={theme.background}
     >
       <Box flexDirection="row">
-        <Text bold color={theme.primary}>scode</Text><Text dimColor> / </Text><Text color={theme.accent}>{theme.name}</Text>
+        <Text bold color={theme.primary}>scode</Text>
       </Box>
       {mode === 'tokens' ? (
-        <TokensDashboard stats={tokenStats ?? computeTokenStats([], new Date())} theme={theme} />
+        <TokensDashboard stats={displayedTokenStats} theme={theme} />
       ) : mode === 'help' ? (
         <Box borderStyle="round" borderColor={theme.border} flexDirection="column" paddingX={1}>
           <Text bold color={theme.primary}>Controls</Text>
@@ -434,7 +442,12 @@ export function App() {
           )}
         </Box>
       )}
-      <Text dimColor>{message}</Text>
+      <Box justifyContent="space-between">
+        <Text dimColor>{message}</Text>
+        {mode === 'task' && (
+          <Text color={theme.accent}>Tokens · today {formatCompactTokens(displayedTokenStats.today.total)} · 7d {formatCompactTokens(displayedTokenStats.week.total)}</Text>
+        )}
+      </Box>
       {mode === 'task' && <Text dimColor>{interactionMode.toUpperCase()} · x mode · Tab focus · e edit · o continue · f free · r refresh · ? help</Text>}
     </Box>
   );

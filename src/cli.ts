@@ -264,7 +264,8 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
       '',
       '',
       ui.dim(`Backends  ${BACKEND_IDS.join(' · ')}`),
-      ui.dim('Upcoming  Cursor CLI · Bivia coordinated teams'),
+      ui.dim('Upcoming  Cursor CLI'),
+      ui.dim('Upcoming  Bivia CLI'),
     ].join('\n'));
     return 0;
   }
@@ -474,7 +475,8 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
       const login = snapshots[index - 2]?.loginStatus;
       return login === 'active' ? ui.good(line) : login === 'logged-out' ? ui.bad(line) : ui.warn(line);
     }).join('\n'));
-    console.log(ui.dim('\nUpcoming  Cursor CLI · Bivia coordinated teams'));
+    console.log(ui.dim('\nUpcoming  Cursor CLI'));
+    console.log(ui.dim('Upcoming  Bivia CLI'));
     console.log(ui.dim('Edit      scode backend set <id> --label NAME --account HINT'));
     return 0;
   }

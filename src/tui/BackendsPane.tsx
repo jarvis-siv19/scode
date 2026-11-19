@@ -71,7 +71,8 @@ export function BackendsPane({ backends, theme, wide = false, selectedBackend }:
           </Box>
         );
       })}
-      <Text dimColor>  Upcoming · Cursor CLI · Bivia coordinated teams</Text>
+      <Text dimColor>  Upcoming · Cursor CLI</Text>
+      <Text dimColor>  Upcoming · Bivia CLI</Text>
     </Box>
   );
 }

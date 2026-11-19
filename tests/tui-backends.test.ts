@@ -38,6 +38,7 @@ test('backends pane separates login, usage, reset, and provider columns', () => 
   assert.match(output, /Antigravity\s+● active.*on run.*Google OAuth \/ GCP/);
   assert.match(output, /OpenCode\s+● active.*free.*OpenCode free/);
   assert.match(output, /Claude\s+● active.*provider.*Amazon Bedrock/);
-  assert.match(output, /Upcoming · Cursor CLI · Bivia coordinated teams/);
+  assert.match(output, /Upcoming · Cursor CLI/);
+  assert.match(output, /Upcoming · Bivia CLI/);
   assert.doesNotMatch(output, /UNKNOWN/);
 });

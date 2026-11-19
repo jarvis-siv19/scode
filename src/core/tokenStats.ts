@@ -163,6 +163,11 @@ export function formatTokens(value: number): string {
   return value.toLocaleString('en-US');
 }
 
+/** Compact headline value for the home-screen footer (e.g. 59.1K). */
+export function formatCompactTokens(value: number): string {
+  return value.toLocaleString('en-US', { notation: 'compact', maximumFractionDigits: 1 });
+}
+
 function totalsLine(label: string, totals: TokenTotals): string {
   const unknown = totals.runs - totals.runsWithUsage;
   const parts = [
