@@ -1,9 +1,8 @@
 import { resolve } from 'node:path';
-import { classifyAsync } from './core/classifier.js';
 import { dispatch } from './core/dispatcher.js';
 import { buildGraph, ensureGitignored, graphStatus, graphifyInfo, installGraphHooks } from './core/graphify.js';
 import { readLedgerTail } from './core/ledger.js';
-import { selectBackend } from './core/policy.js';
+import { routeTask } from './core/router.js';
 import { computeTokenStats, renderTokenDashboard } from './core/tokenStats.js';
 import { backendSnapshots } from './core/quota.js';
 import {
@@ -341,9 +340,8 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
     return 0;
   }
 
-  const classification = await classifyAsync(command.brief);
   const priors = await getPriors();
-  const selection = selectBackend(classification, snapshots, command.backend, { priors });
+  const { classification, selection } = await routeTask(command.brief, snapshots, command.backend, { priors });
   console.error(`[jcode] ${selection.backend}: ${selection.reason}`);
   const result = await dispatch({
     brief: command.brief,

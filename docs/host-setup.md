@@ -1,9 +1,10 @@
 # Host setup (macOS)
 
-jcode is local-first: it runs on the machine where the coding CLIs are
-installed and logged in. This is that machine's setup guide. Nothing here
-needs a server, a paid API key, or a token handed to anyone — every adapter
-spawns the official CLI, which keeps its own login.
+scode runs on the machine where the coding CLIs are installed and logged in.
+When Bivia is configured, scode sends the task brief and available-backend
+summaries to its decision API; without Bivia, routing uses local rules. In
+either case, adapters launch the official coding CLIs, which keep their own
+logins. See [Bivia routing](bivia-routing.md) for details.
 
 ## 1. Prereqs
 

@@ -1,10 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
-import { classifyAsync } from '../core/classifier.js';
 import { dispatch } from '../core/dispatcher.js';
 import { readLedgerTail } from '../core/ledger.js';
-import { selectBackend } from '../core/policy.js';
 import { backendSnapshots, setManualQuota } from '../core/quota.js';
+import { routeTask } from '../core/router.js';
 import { loadSchedules, runDueSchedules } from '../core/schedules.js';
 import { getPriors } from '../core/scoring.js';
 import { computeTokenStats, formatTokens, type TokenStats } from '../core/tokenStats.js';
@@ -141,11 +140,11 @@ export function App() {
 
   const submit = async (brief: string) => {
     if (!brief.trim() || running) return;
-    const classification = await classifyAsync(brief);
     const priors = await getPriors();
+    let classification;
     let selection;
     try {
-      selection = selectBackend(classification, backends, override, { priors });
+      ({ classification, selection } = await routeTask(brief, backends, override, { priors }));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
       return;

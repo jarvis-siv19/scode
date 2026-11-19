@@ -1,7 +1,7 @@
 {
   "name": "@sivab193/scode",
   "version": "0.1.0",
-  "description": "Local-first quota-aware router for coding agent CLIs",
+  "description": "Quota-aware coding-agent router with optional Bivia decisions",
   "type": "module",
   "bin": {
     "scode": "dist/index.js",

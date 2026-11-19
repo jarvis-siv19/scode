@@ -2,9 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { CronExpressionParser } from 'cron-parser';
 import { ensureStateHome, statePaths } from '../config.js';
-import { classifyAsync } from './classifier.js';
 import { dispatch } from './dispatcher.js';
-import { selectBackend } from './policy.js';
+import { routeTask } from './router.js';
 import { backendSnapshots } from './quota.js';
 import { getPriors } from './scoring.js';
 import type { BackendId, RunResult } from './types.js';
@@ -216,10 +215,9 @@ export async function dispatchScheduled(
   schedule: Schedule,
   onOutput?: (chunk: string) => void,
 ): Promise<RunResult> {
-  const classification = await classifyAsync(schedule.brief);
   const snapshots = await backendSnapshots();
   const priors = await getPriors();
-  const selection = selectBackend(classification, snapshots, schedule.backend, { priors });
+  const { classification, selection } = await routeTask(schedule.brief, snapshots, schedule.backend, { priors });
   const stream = onOutput
     ? { onStdout: onOutput, onStderr: onOutput }
     : undefined;
