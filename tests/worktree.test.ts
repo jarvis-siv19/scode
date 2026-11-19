@@ -17,8 +17,8 @@ test('worktree: creates an isolated worktree and removes it', async () => {
   await mkdir(repo, { recursive: true });
   try {
     await git(['init', '-b', 'main'], repo);
-    await git(['config', 'user.email', 'test@jcode.local'], repo);
-    await git(['config', 'user.name', 'jcode test'], repo);
+    await git(['config', 'user.email', 'test@scode.local'], repo);
+    await git(['config', 'user.name', 'scode test'], repo);
     await writeFile(join(repo, 'a.txt'), 'hello\n');
     await git(['add', '.'], repo);
     await git(['commit', '-m', 'init'], repo);

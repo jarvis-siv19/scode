@@ -2,7 +2,7 @@
  * Laya integration seam (handoff §10 — "Laya integrates here").
  *
  * Laya is his local 322M model, the router brain. When it is serving
- * (JCODE_LAYA_URL set, e.g. http://localhost:8080), jcode asks it to
+ * (JCODE_LAYA_URL set, e.g. http://localhost:8080), scode asks it to
  * classify the brief first; when it is not configured, or the call fails
  * or returns something invalid, the rule-based classifier takes over
  * silently. Laya is never a hard dependency.

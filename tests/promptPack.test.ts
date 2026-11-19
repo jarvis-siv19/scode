@@ -19,17 +19,17 @@ test('prompt pack: installs all four files into an empty worktree', async () => 
   const dir = await mkdtemp(join(tmpdir(), 'jcode-pack-'));
   const result = await installPromptPack(dir);
   assert.deepEqual(result.installed.sort(), [
-    '.kiro/steering/jcode.md',
+    '.kiro/steering/scode.md',
     'AGENTS.md',
     'CLAUDE.md',
     'JCODE_NOTES.md',
   ]);
   assert.deepEqual(result.skipped, []);
   const agents = await readFile(join(dir, 'AGENTS.md'), 'utf-8');
-  assert.match(agents, /headless under jcode/);
+  assert.match(agents, /headless under scode/);
   const notes = await readFile(join(dir, 'JCODE_NOTES.md'), 'utf-8');
   assert.match(notes, /shared lessons across backends/);
-  await access(join(dir, '.kiro', 'steering', 'jcode.md'));
+  await access(join(dir, '.kiro', 'steering', 'scode.md'));
 });
 
 test('prompt pack: never overwrites the repo’s own steering files', async () => {

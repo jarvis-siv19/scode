@@ -50,6 +50,8 @@ export interface RunRequest {
   timeoutMs: number;
   /** Resume an earlier session instead of cold-starting (per-backend id). */
   sessionId?: string;
+  /** Stop the vendor CLI process when the caller cancels this run. */
+  signal?: AbortSignal;
   /** Print the exact command instead of running it. */
   dryRun?: boolean;
 }
@@ -59,6 +61,7 @@ export type ErrorClass =
   | 'capability' // agent ran but produced nothing usable
   | 'availability' // 5xx / network / MCP startup failure — retry sideways
   | 'timeout'
+  | 'cancelled'
   | 'backend-error'
   | 'auth';
 

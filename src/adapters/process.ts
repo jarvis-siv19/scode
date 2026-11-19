@@ -49,8 +49,9 @@ const AVAILABILITY_PATTERNS = [
 ];
 
 /** Classify a failure from exit code + output tail. Pure — unit-tested. */
-export function classifyFailure(exitCode: number | null, tail: string, timedOut: boolean): ErrorClass | null {
+export function classifyFailure(exitCode: number | null, tail: string, timedOut: boolean, cancelled = false): ErrorClass | null {
   if (timedOut) return 'timeout';
+  if (cancelled) return 'cancelled';
   if (exitCode === 0 || exitCode === null) return null;
   const text = tail.toLowerCase();
   if (QUOTA_PATTERNS.some((pattern) => text.includes(pattern))) return 'quota';
@@ -127,6 +128,21 @@ export function runProcess(spec: SpawnSpec, request: RunRequest, callbacks: Proc
     });
   }
 
+  if (request.signal?.aborted) {
+    const finished = Date.now();
+    return Promise.resolve({
+      taskId: request.taskId,
+      backend: request.backend,
+      startedAt,
+      finishedAt: new Date(finished).toISOString(),
+      durationMs: finished - started,
+      exitCode: null,
+      signal: null,
+      success: false,
+      errorClass: 'cancelled',
+    });
+  }
+
   return new Promise((resolve, reject) => {
     const child = spawn(spec.command, spec.args, {
       cwd: request.cwd,
@@ -135,13 +151,33 @@ export function runProcess(spec: SpawnSpec, request: RunRequest, callbacks: Proc
       windowsHide: true,
     });
     // Headless vendor CLIs may interpret an open pipe as more prompt input.
-    // jcode passes the complete brief in argv, so close stdin immediately.
+    // scode passes the complete brief in argv, so close stdin immediately.
     child.stdin.end();
 
     let timedOut = false;
+    let cancelled = false;
     let tail = '';
     let lineBuffer = '';
     const events: StreamEvent[] = [];
+    let timer: NodeJS.Timeout | undefined;
+    let killTimer: NodeJS.Timeout | undefined;
+    const cleanup = () => {
+      if (timer) clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
+      request.signal?.removeEventListener('abort', onAbort);
+    };
+    const terminate = () => {
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      child.kill('SIGTERM');
+      killTimer = setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      }, KILL_GRACE_MS);
+      killTimer.unref();
+    };
+    const onAbort = () => {
+      cancelled = true;
+      terminate();
+    };
     const pushTail = (chunk: string) => {
       tail = `${tail}${chunk}`.slice(-TAIL_BYTES);
     };
@@ -175,22 +211,26 @@ export function runProcess(spec: SpawnSpec, request: RunRequest, callbacks: Proc
       callbacks.onStderr(text);
       pushTail(text);
     });
-    child.on('error', reject);
+    child.on('error', (error) => {
+      cleanup();
+      reject(error);
+    });
 
-    const timer = setTimeout(() => {
+    if (request.signal) {
+      request.signal.addEventListener('abort', onAbort, { once: true });
+      if (request.signal.aborted) onAbort();
+    }
+
+    timer = setTimeout(() => {
       timedOut = true;
-      child.kill('SIGTERM');
-      // Escalate: a wedged vendor CLI must not outlive the timeout.
-      setTimeout(() => {
-        if (!child.killed) child.kill('SIGKILL');
-      }, KILL_GRACE_MS).unref();
+      terminate();
     }, request.timeoutMs);
     timer.unref();
 
     child.on('close', (exitCode, signal) => {
-      clearTimeout(timer);
+      cleanup();
       const finished = Date.now();
-      const errorClass = classifyFailure(exitCode, tail, timedOut);
+      const errorClass = classifyFailure(exitCode, tail, timedOut, cancelled);
       resolve({
         taskId: request.taskId,
         backend: request.backend,
@@ -199,7 +239,7 @@ export function runProcess(spec: SpawnSpec, request: RunRequest, callbacks: Proc
         durationMs: finished - started,
         exitCode,
         signal,
-        success: exitCode === 0 && !timedOut,
+        success: exitCode === 0 && !timedOut && !cancelled,
         errorClass,
         sessionId: extractSessionId(events),
         usage: extractUsage(events),

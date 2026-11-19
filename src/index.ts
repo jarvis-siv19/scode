@@ -8,7 +8,7 @@ async function main(): Promise<void> {
   const command = parseArgs(process.argv.slice(2));
   if (command.name === 'tui') {
     if (!process.stdin.isTTY) {
-      console.error('[jcode] the TUI needs an interactive terminal. Use `jcode run "<task>"`, `jcode status`, or `jcode doctor` instead.');
+      console.error('[scode] the TUI needs an interactive terminal. Use `scode run "<task>"`, `scode status`, or `scode doctor` instead.');
       process.exitCode = 2;
       return;
     }
@@ -19,6 +19,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  console.error(`[jcode] ${error instanceof Error ? error.message : String(error)}`);
+  console.error(`[scode] ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
 });

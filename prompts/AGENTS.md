@@ -1,6 +1,6 @@
-# Working notes for agents running under jcode
+# Working notes for agents running under scode
 
-You are running headless under jcode, a router that dispatches coding tasks
+You are running headless under scode, a router that dispatches coding tasks
 across several agent CLIs. There is no human watching your output live — write
 clearly, finish the task, and report what you did and what you could not do.
 

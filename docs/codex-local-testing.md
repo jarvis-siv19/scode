@@ -11,11 +11,11 @@ and logged in. This is that list, in order. Work from a fresh clone of
 - `npm ci` then `npm test` — expect all 129 tests green.
   If any fail on macOS, that is a real bug: fix it on the branch, do not
   skip it.
-- `jcode status` — every installed backend should show a version string.
+- `scode status` — every installed backend should show a version string.
   Missing CLIs show as unavailable with the reason. Nothing should show a
   quota number that was not probed or manually entered.
 
-## 1. Phase 0 gate: `jcode doctor`
+## 1. Phase 0 gate: `scode doctor`
 
 Run the full doctor (not `--quick`). Every dispatch check needs a real,
 logged-in CLI:
@@ -23,7 +23,7 @@ logged-in CLI:
 - **codex-a and codex-b dispatch smoke** — each must create SMOKE.md with
   the exact line in a temp dir. If codex-b fails with an auth error, check
   that its `CODEX_HOME` is really a separate login; if both accounts share
-  one home, jcode will see one pool twice.
+  one home, scode will see one pool twice.
 - **kiro / agy / copilot / opencode dispatch smoke** — same check, one per
   backend. If a backend's headless command differs from the handoff table
   (flags change between releases), update the adapter AND the handoff
@@ -32,7 +32,7 @@ logged-in CLI:
   (this failed on the build VM only because codex was unauthenticated).
   kiro `/usage` parsing is the fragile one: if the format changed, paste
   the raw `/usage` output into the fix commit message and update the parser.
-- **Caveman wrap test** (`jcode doctor --full`) — needs Caveman installed
+- **Caveman wrap test** (`scode doctor --full`) — needs Caveman installed
   (`npx @caveman-ai/cli@latest`). If the wrap breaks a CLI's JSON output,
   that backend goes on the do-not-wrap list (`caveman.perBackend`).
 - **MCP server load test** — must pass; it spawns the real server and lists
@@ -44,7 +44,7 @@ of what this machine can do.
 ## 2. One real run per backend
 
 For each installed backend, run a real task through the router (not a
-smoke test): `jcode run --backend <id> "<a small real task in a test repo>"`.
+smoke test): `scode run --backend <id> "<a small real task in a test repo>"`.
 Check each run in the ledger (`~/.jcode/ledger.jsonl`):
 
 - `run-started` and `run-finished` records exist with matching task ids.
@@ -53,7 +53,7 @@ Check each run in the ledger (`~/.jcode/ledger.jsonl`):
 - Tokens / cost / premium-requests are recorded when the backend reports
   them; absent when it does not. Never a fabricated number.
 - Session ids are captured in `sessions.json`, and a follow-up
-  `jcode run` on the same task resumes the session.
+  `scode run` on the same task resumes the session.
 
 ## 3. Prompt pack
 
@@ -61,7 +61,7 @@ Check each run in the ledger (`~/.jcode/ledger.jsonl`):
   The job's worktree diff must contain the four seeded files, and the agent
   must have read them (check the run output for a reference to the working
   rules or JCODE_NOTES.md).
-- Run a job in a repo that HAS its own AGENTS.md. jcode must not overwrite
+- Run a job in a repo that HAS its own AGENTS.md. scode must not overwrite
   it — the file must be byte-identical afterwards.
 - If a backend ignores its steering file (some versions do), note which one
   and how you confirmed it. Do not work around it by duplicating the rules
@@ -69,7 +69,7 @@ Check each run in the ledger (`~/.jcode/ledger.jsonl`):
 
 ## 4. TUI
 
-Bare `jcode` in Terminal or iTerm2. Check: task bar accepts input, backends
+Bare `scode` in Terminal or iTerm2. Check: task bar accepts input, backends
 pane shows quota bars and reset times, `m` opens manual quota entry and the
 entry shows as MANUAL, up/down cycles the backend override, `?` shows help,
 `r` refreshes probes, jobs show live elapsed time, and `q` quits cleanly.
@@ -78,7 +78,7 @@ replace the TUI.
 
 ## 5. MCP tools
 
-- `jcode tools install`, then `jcode tools status` — all five backends
+- `scode tools install`, then `scode tools status` — all five backends
   should show configured (agy is skipped by design; see §7).
 - Ask a backend to use `file-peek` on a real file, `pdf-read` on a real PDF,
   `latex-build` on a real .tex file, and `graph-query` on an initialized
@@ -113,27 +113,27 @@ replace the TUI.
 Do not enable before then. When Pro is live:
 
 1. Set `claudeEnabled: true` in config AND `JCODE_CLAUDE_ENABLED=true`.
-2. `jcode doctor` — the claude dispatch smoke must pass.
-3. One real `jcode run --backend claude` task; verify `total_cost_usd`
+2. `scode doctor` — the claude dispatch smoke must pass.
+3. One real `scode run --backend claude` task; verify `total_cost_usd`
    lands in the ledger.
 4. If the adapter's command needs flags for the installed Claude version,
    update the adapter and the handoff table together.
 
 ## 9. Learn loop (after a few days of real runs)
 
-- `jcode learn` — the report must show real per-backend x class stats.
+- `scode learn` — the report must show real per-backend x class stats.
 - `~/.jcode/lessons.md` must accumulate one entry per fold.
 - If a proposal looks wrong, say which numbers disagree — do not tune the
   thresholds to make the report look nicer.
 
 ## 10. Scheduled jobs
 
-- `jcode schedule add "say hello" --in 1m`, then `jcode schedule tick
+- `scode schedule add "say hello" --in 1m`, then `scode schedule tick
   --dry-run` — must say "Would fire" after the minute passes.
-- `jcode schedule tick` — must dispatch through the real router (check the
+- `scode schedule tick` — must dispatch through the real router (check the
   ledger: the run-started record carries a `scheduleId`), and the one-shot
-  must show disabled in `jcode schedule list` afterwards.
-- `jcode schedule install` — must print a crontab line on macOS, not a
+  must show disabled in `scode schedule list` afterwards.
+- `scode schedule install` — must print a crontab line on macOS, not a
   `schtasks` command. Do NOT install it without asking — changing the
   user's crontab is a system change.
 - Open the TUI with a due schedule pending: it must fire as a `[sched]`
@@ -141,7 +141,7 @@ Do not enable before then. When Pro is live:
 
 ## 11. Token dashboard
 
-- After the §2 runs, `jcode tokens` must show non-zero today totals that
+- After the §2 runs, `scode tokens` must show non-zero today totals that
   match the ledger's `usage` fields (spot-check one run by hand).
 - The TUI bottom bar must show the same two numbers; `t` must open the
   dashboard and any key must return to the task view with an empty task
@@ -152,21 +152,21 @@ Do not enable before then. When Pro is live:
 ## 12. Graphify code graph
 
 - Install Python 3.11+ and `uv tool install "graphifyy[mcp]"` (pin the
-  version), then `jcode doctor` must PASS the three Graphify checks.
-- `jcode graph init` on the jcode repo itself: graph builds in seconds,
-  `graphify-out/` appears in .gitignore, hooks install, and `jcode graph
+  version), then `scode doctor` must PASS the three Graphify checks.
+- `scode graph init` on the scode repo itself: graph builds in seconds,
+  `graphify-out/` appears in .gitignore, hooks install, and `scode graph
   status` reports current.
-- `jcode run` in a repo with no graph must build it first (look for the
-  `[jcode] code graph:` line) and the run-started ledger record must carry
+- `scode run` in a repo with no graph must build it first (look for the
+  `[scode] code graph:` line) and the run-started ledger record must carry
   `graphPresent` / `graphBuiltAtCommit` / `graphAction`.
 - From inside a job, the agent must be able to call the `graph-query` MCP
   tool and get an answer about the repo (it resolves the graph from the
-  worktree to the main checkout). If the tool is missing, `jcode tools
+  worktree to the main checkout). If the tool is missing, `scode tools
   install` was not run for that backend.
 - Commit a change, then run a dispatch: the graph must rebuild (stale
   detection via `built_at_commit` vs HEAD).
 - Do NOT run `graphify extract` — the full pipeline needs an LLM backend.
-  jcode only ever calls `update` and the query commands.
+  scode only ever calls `update` and the query commands.
 - Dart check (informational): run `graphify update` on the SplitLLM
   flutter-app and confirm whether a newer graphify version parses Dart yet
   — 0.9.112 did not.

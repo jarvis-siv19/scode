@@ -1,9 +1,33 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyFailure, extractSessionId, extractUsage } from '../dist/adapters/process.js';
+import { classifyFailure, extractSessionId, extractUsage, runProcess } from '../dist/adapters/process.js';
 
 test('classifyFailure: timeout wins over exit code', () => {
   assert.equal(classifyFailure(null, '', true), 'timeout');
+});
+
+test('classifyFailure: cancellation is distinct from backend errors', () => {
+  assert.equal(classifyFailure(143, '', false, true), 'cancelled');
+});
+
+test('runProcess: an aborted signal terminates the child process', async () => {
+  const controller = new AbortController();
+  const promise = runProcess(
+    { command: process.execPath, args: ['-e', 'setTimeout(() => {}, 30000)'] },
+    {
+      taskId: 'cancel-test',
+      brief: 'test cancellation',
+      backend: 'codex-a',
+      cwd: process.cwd(),
+      timeoutMs: 5000,
+      signal: controller.signal,
+    },
+    { onStdout: () => {}, onStderr: () => {} },
+  );
+  setTimeout(() => controller.abort(), 50);
+  const result = await promise;
+  assert.equal(result.success, false);
+  assert.equal(result.errorClass, 'cancelled');
 });
 
 test('classifyFailure: exit 0 is not a failure', () => {

@@ -198,6 +198,29 @@ test('schedules: a throwing dispatch still advances the schedule (no re-fire loo
   });
 });
 
+test('schedules: cancellation reaches the active dispatch and stops later due jobs', async () => {
+  await withTempHome(async () => {
+    const now = new Date(2026, 10, 18, 12, 0, 0);
+    await addSchedule({ brief: 'first', cron: '0 9 * * *', now: new Date(2026, 10, 17, 12, 0, 0) });
+    await addSchedule({ brief: 'second', cron: '0 9 * * *', now: new Date(2026, 10, 17, 12, 0, 0) });
+    const controller = new AbortController();
+    let calls = 0;
+    const result = await runDueSchedules({
+      now,
+      signal: controller.signal,
+      dispatchFn: async (_schedule, _onOutput, signal) => {
+        calls += 1;
+        assert.equal(signal, controller.signal);
+        controller.abort();
+        return { ...fakeResult(false), errorClass: 'cancelled', exitCode: 143 };
+      },
+    });
+    assert.equal(calls, 1);
+    assert.equal(result.fired.length, 1);
+    assert.equal(result.fired[0].success, false);
+  });
+});
+
 test('schedules: install hint is per-platform', () => {
   assert.match(installHint('win32'), /schtasks/);
   assert.match(installHint('linux'), /crontab -e/);

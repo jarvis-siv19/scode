@@ -80,7 +80,7 @@ export function parseArgs(argv: string[]): Command {
   }
   if (name === 'tools') {
     const action = rest[0];
-    if (action !== 'install' && action !== 'status') throw new Error('Usage: jcode tools <install|status>');
+    if (action !== 'install' && action !== 'status') throw new Error('Usage: scode tools <install|status>');
     return { name: 'tools', action };
   }
   if (name === 'schedule') return parseScheduleArgs(rest);
@@ -107,14 +107,14 @@ export function parseArgs(argv: string[]): Command {
     }
   }
   const brief = briefParts.join(' ').trim();
-  if (!brief) throw new Error('jcode run requires a task brief');
+  if (!brief) throw new Error('scode run requires a task brief');
   return { name: 'run', brief, backend, cwd, dryRun };
 }
 
 function parseGraphArgs(rest: string[]): Extract<Command, { name: 'graph' }> {
   const [action, ...args] = rest;
   if (action !== 'init' && action !== 'status' && action !== 'refresh') {
-    throw new Error('Usage: jcode graph <init|status|refresh> [path] [--force]');
+    throw new Error('Usage: scode graph <init|status|refresh> [path] [--force]');
   }
   const force = args.includes('--force');
   const pathArg = args.find((arg) => !arg.startsWith('--'));
@@ -129,11 +129,11 @@ function parseScheduleArgs(rest: string[]): Extract<Command, { name: 'schedule' 
     return { name: 'schedule', action: 'tick', dryRun: args.includes('--dry-run') };
   }
   if (action === 'remove' || action === 'enable' || action === 'disable') {
-    if (!args[0]) throw new Error(`Usage: jcode schedule ${action} <id>`);
+    if (!args[0]) throw new Error(`Usage: scode schedule ${action} <id>`);
     return { name: 'schedule', action, id: args[0] };
   }
   if (action !== 'add') {
-    throw new Error('Usage: jcode schedule <add|list|remove|enable|disable|tick|install>');
+    throw new Error('Usage: scode schedule <add|list|remove|enable|disable|tick|install>');
   }
   let backend: BackendId | undefined;
   let cwd: string | undefined;
@@ -175,9 +175,9 @@ function parseScheduleArgs(rest: string[]): Extract<Command, { name: 'schedule' 
     }
   }
   const brief = briefParts.join(' ').trim();
-  if (!brief) throw new Error('jcode schedule add requires a task brief');
+  if (!brief) throw new Error('scode schedule add requires a task brief');
   const kinds = [cron !== undefined, at !== undefined, inMs !== undefined].filter(Boolean).length;
-  if (kinds !== 1) throw new Error('jcode schedule add needs exactly one of --cron, --at, or --in');
+  if (kinds !== 1) throw new Error('scode schedule add needs exactly one of --cron, --at, or --in');
   return { name: 'schedule', action: 'add', brief, cron, at, inMs, backend, cwd };
 }
 
@@ -185,19 +185,19 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
   if (command.name === 'help') {
     console.log([
       'Usage:',
-      '  jcode                                    open the terminal UI',
-      '  jcode run [--backend ID] [--cwd PATH] [--dry-run] "<task>"',
-      '  jcode status                             per-backend headroom (runs probes)',
-      '  jcode doctor [--quick] [--full]          Phase 0 machine smoke tests',
-      '  jcode learn                              learning fold (Phase 5)',
-      '  jcode tokens                             token usage dashboard (today + last 7 days)',
+      '  scode                                    open the terminal UI',
+      '  scode run [--backend ID] [--cwd PATH] [--dry-run] "<task>"',
+      '  scode status                             per-backend headroom (runs probes)',
+      '  scode doctor [--quick] [--full]          Phase 0 machine smoke tests',
+      '  scode learn                              learning fold (Phase 5)',
+      '  scode tokens                             token usage dashboard (today + last 7 days)',
       `  scode theme [list | set <${THEME_IDS.join('|')}>]  choose a TUI color theme`,
-      '  jcode tools <install|status>             wire the jcode-tools MCP server into backends',
-      '  jcode graph <init|status|refresh> [path] code graph for a repo (Graphify, local only)',
-      '  jcode schedule add "<task>" --cron "0 9 * * 1-5"  recurring job (local time)',
-      '  jcode schedule add "<task>" --at 2026-11-20T09:00  one-shot job',
-      '  jcode schedule add "<task>" --in 2h       one-shot job, relative',
-      '  jcode schedule <list|remove|enable|disable|tick|install>',
+      '  scode tools <install|status>             wire the jcode-tools MCP server into backends',
+      '  scode graph <init|status|refresh> [path] code graph for a repo (Graphify, local only)',
+      '  scode schedule add "<task>" --cron "0 9 * * 1-5"  recurring job (local time)',
+      '  scode schedule add "<task>" --at 2026-11-20T09:00  one-shot job',
+      '  scode schedule add "<task>" --in 2h       one-shot job, relative',
+      '  scode schedule <list|remove|enable|disable|tick|install>',
       '',
       `Backends: ${BACKEND_IDS.join(', ')}`,
     ].join('\n'));
@@ -236,7 +236,7 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
       for (const row of rows) {
         console.log(`${row.backend.padEnd(10)} ${row.configured ? 'configured' : 'not configured'}  ${row.path}`);
       }
-      console.log('agy        skipped (config path unconfirmed — see `jcode tools install`)');
+      console.log('agy        skipped (config path unconfirmed — see `scode tools install`)');
       return 0;
     }
     // codex-a and codex-b share one config file — install once.
@@ -257,7 +257,7 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
     if (command.action === 'list') {
       const schedules = await loadSchedules();
       if (schedules.length === 0) {
-        console.log('No schedules. Add one with: jcode schedule add "<task>" --cron "0 9 * * 1-5"');
+        console.log('No schedules. Add one with: scode schedule add "<task>" --cron "0 9 * * 1-5"');
         return 0;
       }
       for (const item of schedules) {
@@ -278,7 +278,7 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
         cwd: command.cwd,
       });
       console.log(`Scheduled ${created.id} — next run ${created.nextRunAt} (${created.kind}, ${created.backend ?? 'auto'}).`);
-      console.log('It fires when `jcode schedule tick` runs — see `jcode schedule install`, or keep the TUI open.');
+      console.log('It fires when `scode schedule tick` runs — see `scode schedule install`, or keep the TUI open.');
       return 0;
     }
     if (command.action === 'remove') {
@@ -294,9 +294,9 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
     // tick
     const result = await runDueSchedules({
       dryRun: command.dryRun,
-      onStart: ({ schedule }) => console.log(`[jcode] firing ${schedule.id}: ${schedule.brief.slice(0, 60)}`),
+      onStart: ({ schedule }) => console.log(`[scode] firing ${schedule.id}: ${schedule.brief.slice(0, 60)}`),
       onFinish: ({ schedule }, runResult) => {
-        console.log(`[jcode] ${schedule.id} ${runResult.success ? 'succeeded' : `failed (${runResult.errorClass ?? 'unknown'})`} on ${runResult.backend}`);
+        console.log(`[scode] ${schedule.id} ${runResult.success ? 'succeeded' : `failed (${runResult.errorClass ?? 'unknown'})`} on ${runResult.backend}`);
       },
     });
     if (result.dryRun) {
@@ -315,13 +315,13 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
     if (command.action === 'status') {
       const status = await graphStatus(repoPath);
       if (!status.present) {
-        console.log(`No code graph at ${status.outDir}. Build one with: jcode graph init ${repoPath}`);
+        console.log(`No code graph at ${status.outDir}. Build one with: scode graph init ${repoPath}`);
         return 0;
       }
       console.log(`Graph: ${status.outDir}`);
       console.log(`  nodes: ${status.nodeCount ?? '?'} · built at ${status.builtAtCommit?.slice(0, 7) ?? 'unknown'} · graphify ${status.graphifyVersion ?? 'unknown'}`);
       console.log(`  HEAD: ${status.headCommit?.slice(0, 7) ?? 'not a git repo'}`);
-      console.log(`  state: ${status.stale ? 'STALE — run `jcode graph refresh`' : 'current'}`);
+      console.log(`  state: ${status.stale ? 'STALE — run `scode graph refresh`' : 'current'}`);
       return 0;
     }
     const info = await graphifyInfo();
@@ -372,7 +372,7 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
 
   const priors = await getPriors();
   const { classification, selection } = await routeTask(command.brief, snapshots, command.backend, { priors });
-  console.error(`[jcode] ${selection.backend}: ${selection.reason}`);
+  console.error(`[scode] ${selection.backend}: ${selection.reason}`);
   const result = await dispatch({
     brief: command.brief,
     backend: selection.backend,

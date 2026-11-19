@@ -1,14 +1,14 @@
 /**
  * The lessons store (Phase 5 scope: "report, lessons store, weekly fold").
  *
- * `jcode learn` writes the full report to learn-report.md (overwritten each
+ * `scode learn` writes the full report to learn-report.md (overwritten each
  * fold) AND appends a dated entry here, to ~/.jcode/lessons.md. The store is
  * append-only: it is the durable record of what each fold concluded, so a
  * later fold — or the user — can see what was proposed, what was acted on,
  * and whether the numbers moved. Entries are short on purpose: the snapshot
  * numbers plus the proposals, nothing else.
  *
- * Cadence: run `jcode learn` weekly. The report answers "what is true now";
+ * Cadence: run `scode learn` weekly. The report answers "what is true now";
  * this file answers "what did we learn, and when".
  */
 import { appendFile } from 'node:fs/promises';

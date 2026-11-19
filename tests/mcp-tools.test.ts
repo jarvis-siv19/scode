@@ -72,10 +72,10 @@ test('pdf-read: extracts text from a real PDF', async (t) => {
   }
   const dir = await mkdtemp(join(tmpdir(), 'jcode-pdf-'));
   const file = join(dir, 'sample.pdf');
-  await writeFile(file, minimalPdf('jcode pdf ok'));
+  await writeFile(file, minimalPdf('scode pdf ok'));
   const result = await readPdf({ path: file });
   assert.equal(result.isError, false);
-  assert.match(result.text, /jcode pdf ok/);
+  assert.match(result.text, /scode pdf ok/);
 });
 
 test('pdf-read: missing file is a clean error', async () => {
@@ -122,7 +122,7 @@ test('graph-query: errors clearly when no graph exists in the repo', async () =>
     const result = await queryGraphTool({ question: 'who calls hello' });
     assert.equal(result.isError, true);
     assert.match(result.text, /no code graph/);
-    assert.match(result.text, /jcode graph init/);
+    assert.match(result.text, /scode graph init/);
   } finally {
     process.chdir(savedCwd);
   }

@@ -32,9 +32,10 @@ scode doctor --quick
 scode theme set ember
 ```
 
-Running `scode` opens the interactive terminal UI. Use `jcode` as a
-compatibility alias. Choose from Ember (red/black), Classic, Aurora, or Violet
-with `scode theme set <name>`.
+Running `scode` opens the interactive terminal UI. Choose from Ember
+(red/black), Classic, Aurora, or Violet with `scode theme set <name>`.
+In the TUI, click to pin a backend or select a job; stop a running job with
+the Stop action or `s`. Tab and arrow keys work without a mouse.
 
 ## Features
 

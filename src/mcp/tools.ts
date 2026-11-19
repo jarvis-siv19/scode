@@ -1,5 +1,5 @@
 /**
- * Phase 4 — the jcode MCP tool suite (handoff §8).
+ * Phase 4 — the scode MCP tool suite (handoff §8).
  *
  * One server, `jcode-tools`, exposing the three tools the handoff ships first:
  * pdf-read, latex-build, file-peek — plus graph-query, added for the Graphify
@@ -33,7 +33,7 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   'file-peek': 'Read a slice of a text file by line number, with line numbers. Use this instead of reading a whole file when you only need part of it.',
   'pdf-read': 'Extract text from a PDF, optionally limited to a page range. Returns plain text; output is capped.',
   'latex-build': 'Compile a LaTeX document to PDF (latexmk when available, else two pdflatex passes). Returns the PDF path on success, or the log tail on failure.',
-  'graph-query': 'Query the repo code graph (Graphify) instead of grepping for structure: who calls X, what depends on Y, the impact of a change, the most-connected modules. Returns budgeted graph results with file+line. The graph lives at graphify-out/graph.json in the repo root; if it is missing, say so and suggest `jcode graph init`. Never read graph.json directly — always query it through this tool.',
+  'graph-query': 'Query the repo code graph (Graphify) instead of grepping for structure: who calls X, what depends on Y, the impact of a change, the most-connected modules. Returns budgeted graph results with file+line. The graph lives at graphify-out/graph.json in the repo root; if it is missing, say so and suggest `scode graph init`. Never read graph.json directly — always query it through this tool.',
 };
 
 /** Zod input shapes — the MCP SDK converts these to JSON Schema for tools/list. */
@@ -163,7 +163,7 @@ const MAX_GRAPH_CHARS = 8000;
 
 /**
  * Query the code graph for the repo the agent is working in. The server runs
- * with the agent's cwd, which may be a jcode worktree — resolveMainCheckout
+ * with the agent's cwd, which may be a scode worktree — resolveMainCheckout
  * walks to the main checkout, where the graph lives.
  */
 export async function queryGraphTool(
@@ -174,7 +174,7 @@ export async function queryGraphTool(
   const repoPath = await resolveMainCheckout(process.cwd());
   const meta = await readGraphMeta(repoPath);
   if (!meta) {
-    return error(`graph-query: no code graph at ${graphJsonPath(repoPath)}. Run \`jcode graph init\` in the repo root (or wait for the next jcode dispatch, which builds it automatically when graphify is installed).`);
+    return error(`graph-query: no code graph at ${graphJsonPath(repoPath)}. Run \`scode graph init\` in the repo root (or wait for the next scode dispatch, which builds it automatically when graphify is installed).`);
   }
   const result = await runGraphQuery(repoPath, kind, {
     question: args.question,

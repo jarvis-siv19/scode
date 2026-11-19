@@ -7,7 +7,7 @@ import type { AdapterCallbacks, BackendAdapter } from './types.js';
 /**
  * Codex: `CODEX_HOME=<account> codex exec --json --sandbox workspace-write
  * --skip-git-repo-check -C <worktree> "<brief>"` (handoff §5). The skip flag
- * lets jcode handle tasks outside a repository as well as worktree jobs.
+ * lets scode handle tasks outside a repository as well as worktree jobs.
  * Separate CODEX_HOME per account is the clean official path — one login per
  * CODEX_HOME.
  */

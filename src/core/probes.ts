@@ -190,7 +190,7 @@ function readCodexRateLimits(env: NodeJS.ProcessEnv): Promise<unknown | null> {
       id: 1,
       method: 'initialize',
       params: {
-        clientInfo: { name: 'jcode', version: '0.1.0' },
+        clientInfo: { name: 'scode', version: '0.1.0' },
         capabilities: { experimentalApi: true },
       },
     })}\n`);

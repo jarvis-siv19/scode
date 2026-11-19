@@ -1,18 +1,18 @@
 # Scheduled jobs
 
-A scheduled job is a task with a clock attached: jcode dispatches it through
+A scheduled job is a task with a clock attached: scode dispatches it through
 the normal router (classify → select backend → dispatch with fallback) at
 the time you set. Schedules live in `~/.jcode/schedules.json`; ledger
-records for scheduled runs carry a `scheduleId` so `jcode learn` and the
+records for scheduled runs carry a `scheduleId` so `scode learn` and the
 token dashboard can tell them apart from manual runs.
 
 ## Adding one
 
 ```sh
-jcode schedule add "review open PRs" --cron "0 9 * * 1-5"
-jcode schedule add "summarize yesterday's commits" --at 2026-11-20T09:00
-jcode schedule add "ping me about the deploy" --in 2h
-jcode schedule add "weekly dependency audit" --cron "0 10 * * 1" --backend codex-a
+scode schedule add "review open PRs" --cron "0 9 * * 1-5"
+scode schedule add "summarize yesterday's commits" --at 2026-11-20T09:00
+scode schedule add "ping me about the deploy" --in 2h
+scode schedule add "weekly dependency audit" --cron "0 10 * * 1" --backend codex-a
 ```
 
 - `--cron` takes a 5-field cron expression in **local time** (`min hour
@@ -30,25 +30,25 @@ jcode schedule add "weekly dependency audit" --cron "0 10 * * 1" --backend codex
 ## Managing
 
 ```sh
-jcode schedule list                  # id, on/off, next run, kind, backend, brief
-jcode schedule remove abc123         # unique id prefix is enough
-jcode schedule disable abc123        # keeps it, stops it firing
-jcode schedule enable abc123
-jcode schedule tick --dry-run        # what would fire right now (fires nothing)
-jcode schedule tick                  # fire everything due, now
-jcode schedule install               # the OS wiring for your platform
+scode schedule list                  # id, on/off, next run, kind, backend, brief
+scode schedule remove abc123         # unique id prefix is enough
+scode schedule disable abc123        # keeps it, stops it firing
+scode schedule enable abc123
+scode schedule tick --dry-run        # what would fire right now (fires nothing)
+scode schedule tick                  # fire everything due, now
+scode schedule install               # the OS wiring for your platform
 ```
 
 ## How firing works
 
-jcode is a CLI, not a daemon — nothing fires while no jcode process is
+scode is a CLI, not a daemon — nothing fires while no scode process is
 running. Two routes, pick either:
 
-1. **The TUI.** While `jcode` is open it ticks every minute and fires due
+1. **The TUI.** While `scode` is open it ticks every minute and fires due
    schedules as jobs in the Jobs pane (marked `[sched]`). It never fires
    while another job is running, and never stacks ticks.
-2. **The OS scheduler.** `jcode schedule install` prints the wiring:
-   a cron line (`*/5 * * * * jcode schedule tick`) on macOS/Linux, or a
+2. **The OS scheduler.** `scode schedule install` prints the wiring:
+   a cron line (`*/5 * * * * scode schedule tick`) on macOS/Linux, or a
    `schtasks` command on Windows. A tick every 5 minutes is plenty —
    schedules fire within 5 minutes of their time.
 

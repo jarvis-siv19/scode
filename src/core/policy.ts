@@ -130,5 +130,5 @@ export function selectBackend(
   if (anyAvailable.length > 0) {
     return { backend: anyAvailable[0].id, reason: `${classification.reason}; no preferred backend available, using ${anyAvailable[0].id}` };
   }
-  throw new Error('No backend is available (all disabled, unavailable, or cooling down). Run `jcode doctor` to check this machine.');
+  throw new Error('No backend is available (all disabled, unavailable, or cooling down). Run `scode doctor` to check this machine.');
 }

@@ -29,6 +29,7 @@ export interface DispatchOptions {
   backend: BackendId;
   cwd?: string;
   timeoutMs?: number;
+  signal?: AbortSignal;
   selectionReason: string;
   classification: Record<string, unknown>;
   onStdout?: (chunk: string) => void;
@@ -68,7 +69,7 @@ export async function dispatch(options: DispatchOptions): Promise<RunResult> {
   if (graphEnabled && !options.dryRun && !options.reuseWorktree) {
     graph = await ensureGraph(repoCwd);
     if (graph.action === 'built' || graph.action === 'failed') {
-      console.log(`[jcode] code graph: ${graph.detail}`);
+      console.log(`[scode] code graph: ${graph.detail}`);
     }
   }
   const worktree: Worktree = options.reuseWorktree ?? (options.dryRun
@@ -77,7 +78,7 @@ export async function dispatch(options: DispatchOptions): Promise<RunResult> {
   if (worktree.isWorktree && !options.reuseWorktree) {
     const pack = await installPromptPack(worktree.path);
     if (pack.installed.length > 0) {
-      console.log(`[jcode] prompt pack seeded into worktree: ${pack.installed.join(', ')}`);
+      console.log(`[scode] prompt pack seeded into worktree: ${pack.installed.join(', ')}`);
     }
   }
   const sessionId = await getSessionId(taskId, options.backend);
@@ -89,6 +90,7 @@ export async function dispatch(options: DispatchOptions): Promise<RunResult> {
     cwd: worktree.path,
     timeoutMs: options.timeoutMs ?? config.defaultTimeoutMs,
     sessionId,
+    signal: options.signal,
     dryRun: options.dryRun,
   };
 
@@ -105,7 +107,7 @@ export async function dispatch(options: DispatchOptions): Promise<RunResult> {
     classification: options.classification,
     selectionReason: options.selectionReason,
     ...(options.scheduleId ? { scheduleId: options.scheduleId } : {}),
-    // Graph state at dispatch time, so `jcode learn` can later compare
+    // Graph state at dispatch time, so `scode learn` can later compare
     // graph-vs-no-graph token use. Absent when the graph check was skipped.
     ...(graph ? { graphPresent: graph.status.present, graphBuiltAtCommit: graph.status.builtAtCommit, graphAction: graph.action } : {}),
   });
@@ -143,7 +145,7 @@ export async function dispatch(options: DispatchOptions): Promise<RunResult> {
     return result;
   }
 
-  if (!options.allowFallback || !result.errorClass) return result;
+  if (!options.allowFallback || !result.errorClass || options.signal?.aborted) return result;
 
   const fallback = await pickFallback(request.backend, result.errorClass);
   if (!fallback) return result;

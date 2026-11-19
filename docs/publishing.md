@@ -1,24 +1,24 @@
 # Publishing scode to npm
 
-jcode is TypeScript on Node, so npm is its home. There is no PyPI package:
-PyPI is for Python, and jcode has no Python in it. A PyPI shim that
+scode is TypeScript on Node, so npm is its home. There is no PyPI package:
+PyPI is for Python, and scode has no Python in it. A PyPI shim that
 downloaded the Node build would only confuse installs — one registry, npm.
 
 ## Name
 
-The npm package is `@sivab193/scode`. The primary installed executable is
-`scode`; `jcode` remains available as a compatibility alias.
+The npm package is `@sivab193/scode`. The primary executable is `scode`;
+`jcode` remains available as a compatibility alias.
 
 ```sh
 npm install
 npm run build
-npm link               # installs the local `jcode` command
+npm link               # installs the local `scode` command
 ```
 
 ## One-time setup
 
 Configure npm Trusted Publishing for `@sivab193/scode`, selecting the GitHub
-repository `sivab193/jcode` and the `release.yml` workflow. Allow direct
+repository `sivab193/scode` and the `release.yml` workflow. Allow direct
 `npm publish`; npm's default for new trusted publishers may allow only staged
 publishing. The workflow uses OIDC and npm provenance, so no npm token or
 GitHub secret is needed. Complete a successful publish within two days of

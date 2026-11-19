@@ -1,5 +1,5 @@
 /**
- * Phase 0 — machine smoke tests (`jcode doctor`).
+ * Phase 0 — machine smoke tests (`scode doctor`).
  *
  * Verifies each backend's headless command works from THIS machine, plus the
  * quota probes, the Caveman wrap, and MCP config presence. Results are
@@ -42,7 +42,7 @@ export interface DoctorOptions {
 }
 
 const SMOKE_BRIEF =
-  "Create a file named SMOKE.md in the current directory containing exactly the line 'jcode smoke ok' and nothing else. Do not modify any other file.";
+  "Create a file named SMOKE.md in the current directory containing exactly the line 'scode smoke ok' and nothing else. Do not modify any other file.";
 const SMOKE_TIMEOUT_MS = 5 * 60 * 1000;
 
 function parseVersion(text: string | undefined): [number, number, number] | null {
@@ -77,7 +77,7 @@ async function runSmokeDispatch(backend: BackendId, adapter: BackendAdapter): Pr
     } catch {
       // Marker missing — the agent ran but did not do the job.
     }
-    if (result.success && content.trim() === 'jcode smoke ok') {
+    if (result.success && content.trim() === 'scode smoke ok') {
       return { id: `dispatch-${backend}`, label: `headless dispatch (${backend})`, status: 'pass', detail: `SMOKE.md created in ${Math.round(result.durationMs / 1000)}s` };
     }
     if (result.success) {
@@ -267,7 +267,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<{ results:
       label: 'headless dispatch (claude)',
       status: 'skip',
       detail: config.claudeEnabled
-        ? 'Pro enabled in config but smoke not run yet — run `jcode doctor` again after confirming Pro'
+        ? 'Pro enabled in config but smoke not run yet — run `scode doctor` again after confirming Pro'
         : 'Claude Pro not confirmed live; skipped by design',
     });
   }
@@ -378,7 +378,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<{ results:
       id: 'caveman-wrap',
       label: 'caveman wraps codex exec (JSON stream intact)',
       status: 'skip',
-      detail: options.full ? 'needs caveman + codex installed' : 'run `jcode doctor --full` for the live wrap test',
+      detail: options.full ? 'needs caveman + codex installed' : 'run `scode doctor --full` for the live wrap test',
     });
   }
 
@@ -406,7 +406,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<{ results:
       id: 'graphify-mcp',
       label: 'graphify-mcp binary ([mcp] extra)',
       status: mcpExtra ? 'pass' : 'skip',
-      detail: mcpExtra ? 'installed' : 'not installed — not required; jcode queries the graph via the CLI, not the MCP server',
+      detail: mcpExtra ? 'installed' : 'not installed — not required; scode queries the graph via the CLI, not the MCP server',
     });
   } else {
     push({ id: 'python-version', label: 'Python >= 3.11 (graphify needs it)', status: 'skip', detail: 'graphify not installed' });
@@ -435,10 +435,10 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<{ results:
       label,
       status: text !== null && text.includes(SERVER_NAME) ? 'pass' : 'skip',
       detail: text === null
-        ? `no config file yet — run \`jcode tools install\``
+        ? `no config file yet — run \`scode tools install\``
         : text.includes(SERVER_NAME)
           ? 'jcode-tools entry present'
-          : `config exists without jcode-tools — run \`jcode tools install\``,
+          : `config exists without jcode-tools — run \`scode tools install\``,
     });
   }
 

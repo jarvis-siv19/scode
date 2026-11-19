@@ -59,9 +59,9 @@ export const statePaths = () => ({
   lessons: join(stateHome(), 'lessons.md'),
   /** Per-task session ids, keyed by task id then backend (handoff §5). */
   sessions: join(stateHome(), 'sessions.json'),
-  /** Last `jcode doctor` result (Phase 0 gate record). */
+  /** Last `scode doctor` result (Phase 0 gate record). */
   smoke: join(stateHome(), 'smoke.json'),
-  /** Last `jcode learn` report (Phase 5). */
+  /** Last `scode learn` report (Phase 5). */
   learnReport: join(stateHome(), 'learn-report.md'),
   /** MCP tool-call log, for the Phase 5 dead-tool check. */
   toolCalls: join(stateHome(), 'tool-calls.jsonl'),

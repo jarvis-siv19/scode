@@ -36,21 +36,21 @@ graphify --version                   # verify it is on PATH
 ## 3. Two Codex accounts, two homes
 
 One login per `CODEX_HOME` — this is the clean official path, and it is why
-jcode treats codex-a and codex-b as separate quota pools.
+scode treats codex-a and codex-b as separate quota pools.
 
 ```sh
 CODEX_HOME="$HOME/.codex-a" codex login   # account A
 CODEX_HOME="$HOME/.codex-b" codex login   # account B
 ```
 
-Then point jcode at them in `~/.jcode/config.json`
+Then point scode at them in `~/.jcode/config.json`
 (see `config.example.json` in the repo):
 
 ```json
 { "codexHomes": { "a": "/Users/you/.codex-a", "b": "/Users/you/.codex-b" } }
 ```
 
-If codex-b has no home configured, jcode reports it unavailable rather than
+If codex-b has no home configured, scode reports it unavailable rather than
 silently sharing account A's login.
 
 ## 4. Config
@@ -86,13 +86,13 @@ Environment variables (all optional):
 ```sh
 npm ci
 npm test          # expect all 129 tests green
-jcode doctor      # Phase 0 gate — see docs/codex-local-testing.md
-jcode tools install   # wire the jcode-tools MCP server into the backends
+scode doctor      # Phase 0 gate — see docs/codex-local-testing.md
+scode tools install   # wire the jcode-tools MCP server into the backends
 ```
 
 ## 6. Weekly habit
 
-Run `jcode learn` once a week. It writes the report to
+Run `scode learn` once a week. It writes the report to
 `~/.jcode/learn-report.md` and appends the fold to
 `~/.jcode/lessons.md`. Proposals are presented, never
 auto-applied — read them, then change `config.json` by hand if you agree.

@@ -176,7 +176,7 @@ function totalsLine(label: string, totals: TokenTotals): string {
   return parts.join(' · ');
 }
 
-/** Plain-text dashboard lines, shared by `jcode tokens` and the TUI. */
+/** Plain-text dashboard lines, shared by `scode tokens` and the TUI. */
 export function renderTokenDashboard(stats: TokenStats): string[] {
   const lines: string[] = [];
   lines.push(totalsLine('Today', stats.today));

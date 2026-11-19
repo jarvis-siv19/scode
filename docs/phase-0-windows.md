@@ -21,7 +21,7 @@ Phase 1 must not start until the required smoke checks pass.
 
 | Backend | Observed version | Result | Evidence / blocker |
 | --- | --- | --- | --- |
-| Codex | `codex-cli 0.163.0` | PASS with runtime caveat | `codex exec --json` returned a real streamed answer through jcode. A file-writing task failed inside the nested Windows app sandbox even though the no-tool task passed; investigate before claiming tool-capable nested runs. |
+| Codex | `codex-cli 0.163.0` | PASS with runtime caveat | `codex exec --json` returned a real streamed answer through scode. A file-writing task failed inside the nested Windows app sandbox even though the no-tool task passed; investigate before claiming tool-capable nested runs. |
 | Kiro | `3.1.0` | BLOCKED: quota | `kiro-cli chat --no-interactive --trust-all-tools --output-format stream-json` emitted valid ACP events, then returned `UsageLimitReachedError` for the monthly limit. `/usage` returned the same limit error. |
 | Antigravity (`agy`) | `1.5.11` | PASS | Exact `agy -p "..." --output-format json` returned the requested text, conversation id, duration, and token usage. A separate plan-mode run exited zero with an empty response after a denied command; the adapter must treat empty/denied results as capability failure. |
 | Copilot | not installed | BLOCKED: missing CLI | Cannot verify JSONL or exit-code-3 quota behavior. |
@@ -68,7 +68,7 @@ versus off are blocked. Auto and telemetry settings were not changed or faked.
 [iTerm2](https://github.com/gnachman/iTerm2) is useful as an architecture
 reference for long-lived session servers, reconnect/restore behavior, tmux
 control-mode integration, status components, and regex output triggers. Those
-ideas may inform a later portable `jcode attach`/daemon and reactive failure
+ideas may inform a later portable `scode attach`/daemon and reactive failure
 detectors. iTerm2 itself is macOS-native and GPLv3, so its source will not be
 copied into this MIT-licensed TypeScript project.
 

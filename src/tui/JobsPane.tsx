@@ -7,7 +7,7 @@ export interface JobView {
   id: string;
   brief: string;
   backend: string;
-  state: 'running' | 'success' | 'failed';
+  state: 'running' | 'stopping' | 'success' | 'failed' | 'cancelled';
   startedAt: number;
   finishedAt?: number;
   exitCode?: number | null;
@@ -23,6 +23,8 @@ export interface ScheduleView {
   nextRunAt: string | null;
   enabled: boolean;
 }
+
+export const MAX_VISIBLE_JOBS = 5;
 
 function formatNextRun(nextRunAt: string | null, now: number): string {
   if (!nextRunAt) return '—';
@@ -53,29 +55,48 @@ function formatUsage(usage: RunUsage | undefined): string {
   return parts.length > 0 ? ` — ${parts.join(', ')}` : '';
 }
 
-export function JobsPane({ jobs, schedules, now, theme }: { jobs: JobView[]; schedules?: ScheduleView[]; now: number; theme: TuiTheme }) {
-  const ordered = [...jobs].sort((a, b) => Number(b.state === 'running') - Number(a.state === 'running'));
-  const latest = ordered[0];
+export function JobsPane({ jobs, schedules, now, theme, selectedJobId, totalJobs, startIndex, canClear }: {
+  jobs: JobView[];
+  schedules?: ScheduleView[];
+  now: number;
+  theme: TuiTheme;
+  selectedJobId?: string;
+  totalJobs: number;
+  startIndex: number;
+  canClear: boolean;
+}) {
+  const selectedJob = jobs.find((job) => job.id === selectedJobId);
   const upcoming = (schedules ?? []).filter((item) => item.enabled && item.nextRunAt !== null);
   return (
     <Box borderStyle="round" borderColor={theme.border} flexDirection="column" paddingX={1} width="50%">
-      <Text bold color={theme.primary}>Jobs</Text>
-      {ordered.length === 0 ? <Text dimColor>No jobs yet</Text> : ordered.map((job) => (
+      <Text bold color={theme.primary}>Jobs <Text dimColor>· click row</Text></Text>
+      {jobs.length === 0 ? <Text dimColor>No jobs yet</Text> : jobs.map((job) => (
         <Box key={job.id} flexDirection="column">
-          <Text color={job.state === 'failed' ? theme.error : job.state === 'success' ? theme.success : theme.warning}>
-            {job.state.padEnd(7)} {job.backend.padEnd(9)} {formatElapsed(job.startedAt, job.finishedAt, now).padStart(5)} {job.brief.slice(0, 30)}
+          <Text color={job.id === selectedJobId ? theme.accent
+            : job.state === 'failed' ? theme.error
+              : job.state === 'success' ? theme.success
+                : job.state === 'cancelled' ? theme.disabled : theme.warning}>
+            {job.id === selectedJobId ? '› ' : '  '}{job.state.padEnd(9)} {job.backend.padEnd(9)} {formatElapsed(job.startedAt, job.finishedAt, now).padStart(5)} {job.brief.slice(0, Math.max(1, Math.floor((process.stdout.columns || 80) / 2) - 32))}
           </Text>
-          {(job.usage || job.errorClass) && (
-            <Text dimColor>
-              {'  '}{job.errorClass ? `failed: ${job.errorClass}${job.exitCode !== null && job.exitCode !== undefined ? ` (exit ${job.exitCode})` : ''}` : ''}{formatUsage(job.usage)}
-            </Text>
-          )}
         </Box>
       ))}
-      {latest && latest.outputTail.length > 0 && (
+      {totalJobs > MAX_VISIBLE_JOBS && (
+        <Text dimColor>Showing {startIndex + 1}–{startIndex + jobs.length} of {totalJobs}</Text>
+      )}
+      <Text color={selectedJob?.state === 'running' ? theme.error : theme.disabled}>
+        [S] Stop selected{selectedJob?.state === 'running' ? '' : ' (not running)'}
+      </Text>
+      <Text color={canClear ? theme.accent : theme.disabled}>[C] Clear completed</Text>
+      {selectedJob && (
+        <Text dimColor>
+          {selectedJob.errorClass ? `Error: ${selectedJob.errorClass}${selectedJob.exitCode !== null && selectedJob.exitCode !== undefined ? ` (exit ${selectedJob.exitCode})` : ''}` : ''}
+          {formatUsage(selectedJob.usage)}
+        </Text>
+      )}
+      {selectedJob && selectedJob.outputTail.length > 0 && (
         <Box flexDirection="column" marginTop={1}>
-          <Text dimColor>── {latest.backend} output ──</Text>
-          {latest.outputTail.map((line, index) => (
+          <Text dimColor>── {selectedJob.backend} output ──</Text>
+          {selectedJob.outputTail.map((line, index) => (
             <Text key={index} dimColor>{line.slice(0, 70)}</Text>
           ))}
         </Box>

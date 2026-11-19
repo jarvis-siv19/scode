@@ -12,8 +12,8 @@ export function TaskBar({ value, onChange, onSubmit, disabled, overrideLabel, th
   theme: TuiTheme;
 }) {
   return (
-    <Box borderStyle="round" borderColor={theme.border} paddingX={1}>
-      <Text bold color={theme.primary}>Task › </Text>
+    <Box borderStyle="round" borderColor={disabled ? theme.border : theme.accent} paddingX={1}>
+      <Text bold color={disabled ? theme.disabled : theme.primary}>Task › </Text>
       <TextInput value={value} onChange={onChange} onSubmit={onSubmit} focus={!disabled} placeholder="Describe a coding task and press Enter" />
       <Text dimColor> [{overrideLabel}]</Text>
     </Box>

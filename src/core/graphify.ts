@@ -6,7 +6,7 @@
  * mode only. `graphify update` parses code locally with tree-sitter — no LLM
  * calls, nothing leaves the machine. The hosted Graphify Cloud product is
  * deliberately NOT used: it sends code to third-party subprocessors and is
- * paid past 3 repos, which breaks jcode's local-first, no-paid-credits rules.
+ * paid past 3 repos, which breaks scode's local-first, no-paid-credits rules.
  *
  * Rules this module enforces:
  * - Never call `graphify extract` (the full pipeline needs an LLM backend).
@@ -22,7 +22,7 @@
  * `built_at_commit` field vs `git rev-parse HEAD` — verified live against
  * graphify 0.9.112, where the field matched HEAD exactly.
  *
- * Worktrees: jcode dispatches into per-job worktrees, but the graph lives in
+ * Worktrees: scode dispatches into per-job worktrees, but the graph lives in
  * the MAIN checkout (it describes the base commit, which is what navigation
  * needs). `resolveMainCheckout()` finds the main checkout from any cwd via
  * `git rev-parse --git-common-dir`, so the query tool works from a worktree.
@@ -115,7 +115,7 @@ export async function graphifyInfo(): Promise<{ present: boolean; version: strin
   return { present: info.present, version: info.version ?? null };
 }
 
-/** Is the graphify-mcp binary present (the [mcp] extra)? Informational only — jcode queries via the CLI, not the MCP server. */
+/** Is the graphify-mcp binary present (the [mcp] extra)? Informational only — scode queries via the CLI, not the MCP server. */
 export async function graphifyMcpPresent(): Promise<boolean> {
   return (await cliInfo('graphify-mcp')).present;
 }
@@ -129,7 +129,7 @@ export async function pythonInfo(): Promise<{ present: boolean; version: string 
 
 /**
  * The main checkout for a cwd: for a normal repo this is the repo itself; for
- * a jcode worktree it is the checkout the worktree was made from. Falls back
+ * a scode worktree it is the checkout the worktree was made from. Falls back
  * to the cwd itself when git cannot answer.
  */
 export async function resolveMainCheckout(cwd: string): Promise<string> {

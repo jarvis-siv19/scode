@@ -42,7 +42,7 @@ export async function createWorktree(taskId: string, cwd: string): Promise<Workt
   if (exitCode !== 0) {
     // Worktree creation failed (e.g. dirty index edge cases) — run in cwd
     // rather than failing the job; the ledger records the fallback.
-    console.error(`[jcode] worktree create failed, running in cwd: ${stderr.trim().split('\n')[0] ?? ''}`);
+    console.error(`[scode] worktree create failed, running in cwd: ${stderr.trim().split('\n')[0] ?? ''}`);
     return { path: cwd, isWorktree: false };
   }
   return { path, isWorktree: true };

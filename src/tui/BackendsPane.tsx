@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import type { BackendSnapshot } from '../core/types.js';
+import type { BackendId, BackendSnapshot } from '../core/types.js';
 import type { TuiTheme } from './theme.js';
 
 function resetLabel(resetsAt: string | null): string {
@@ -20,10 +20,15 @@ function stateLabel(backend: BackendSnapshot): string {
   return backend.quota.remainingFraction === null ? 'unknown' : '';
 }
 
-export function BackendsPane({ backends, theme, wide = false }: { backends: BackendSnapshot[]; theme: TuiTheme; wide?: boolean }) {
+export function BackendsPane({ backends, theme, wide = false, selectedBackend }: {
+  backends: BackendSnapshot[];
+  theme: TuiTheme;
+  wide?: boolean;
+  selectedBackend?: BackendId;
+}) {
   return (
     <Box borderStyle="round" borderColor={theme.border} flexDirection="column" paddingX={1} width={wide ? '100%' : '50%'}>
-      <Text bold color={theme.primary}>Backends</Text>
+      <Text bold color={theme.primary}>Backends <Text dimColor>· click title for auto</Text></Text>
       {backends.map((backend) => {
         const remaining = backend.quota.remainingFraction === null ? 'UNKNOWN' : `${Math.round(backend.quota.remainingFraction * 100)}%`;
         const filled = backend.quota.remainingFraction === null ? 0 : Math.round(backend.quota.remainingFraction * 6);
@@ -33,10 +38,11 @@ export function BackendsPane({ backends, theme, wide = false }: { backends: Back
             : backend.status === 'cooling-down' ? theme.cooling : theme.warning;
         const reset = resetLabel(backend.quota.resetsAt);
         const state = stateLabel(backend);
+        const selected = selectedBackend === backend.id;
         return (
           <Box key={backend.id}>
-            <Text color={color}>
-              {backend.id.padEnd(9)} {remaining.padStart(7)}
+            <Text color={selected ? theme.accent : color}>
+              {selected ? '› ' : '  '}{backend.id.padEnd(9)} {remaining.padStart(7)}
               <Text color={theme.quota}> {bar}</Text>
               <Text dimColor>{reset ? ` ${reset}` : ''}{state ? ` · ${state}` : ''}{backend.quota.source === 'manual' ? ' · manual' : ''}</Text>
             </Text>
