@@ -1,6 +1,6 @@
 {
   "name": "@sivab193/scode",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Quota-aware coding-agent router with optional Bivia decisions",
   "type": "module",
   "bin": {

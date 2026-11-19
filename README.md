@@ -6,7 +6,7 @@ scode classifies tasks and selects an eligible coding CLI, then runs the task
 without changing the vendor's tool. With Bivia configured, its fast decision
 API helps classify and route each task; otherwise scode uses local rules.
 
-![scode terminal interface](https://raw.githubusercontent.com/sivab193/scode/main/docs/shots/tui-main.png)
+![scode terminal interface](https://raw.githubusercontent.com/sivab193/scode/main/docs/shots/scode-linkedin.png)
 
 ## Get started
 
@@ -119,7 +119,13 @@ the Stop action or `s`. Tab and arrow keys work without a mouse. Press `x` to
 switch between Task mode (isolated coding worktrees) and Chat mode (a continued
 conversation in the current repo). You can dispatch more tasks while agents
 are already running. Press `o` on a completed job to leave scode and continue
-inside the vendor's unmodified interactive CLI.
+inside the vendor's unmodified interactive CLI. Short greetings such as `hi`,
+`hello`, and `hey` automatically take the lightweight Chat path instead of
+paying the worktree, prompt-pack, and code-graph setup cost.
+
+The home screen shows compact token totals for today and the last seven days;
+press `t` for per-backend and daily detail. Cursor CLI and Bivia CLI are listed
+separately as upcoming integrations.
 
 Backend rows separate login state, usage, reset time, and provider. Codex reset
 windows remain visible; Kiro is identified as a calendar-month allowance. Add
@@ -158,7 +164,8 @@ scode session attach <task-id>
 - Runs concurrent tasks in separate Git worktrees and preserves completed edits.
 - Extracts readable assistant replies from vendor JSON streams.
 - Resumes jobs in each vendor's native interactive terminal UI.
-- Tracks runs and token usage in a local ledger.
+- Tracks runs and token usage in a local ledger, with home-screen totals.
+- Sends conversational greetings through the lightweight Chat path automatically.
 - Supports scheduled jobs and MCP tools.
 
 When enabled, Bivia receives the task brief and available backends' quota
