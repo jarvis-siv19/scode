@@ -1,4 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { ensureStateHome, loadConfig, statePaths } from '../config.js';
 import { BACKEND_BINARIES, MANUAL_TTL_MS, PROBE_TTL_MS, cliInfo, probeBackend } from './probes.js';
 import { BACKEND_IDS, type BackendId, type BackendSnapshot, type QuotaWindow } from './types.js';
@@ -122,6 +124,26 @@ export async function backendSnapshots(options?: { refresh?: boolean }): Promise
   );
   const infoById = new Map(infos.map(({ id, info }) => [id, info]));
 
+  const authNotes = new Map<BackendId, string>();
+  try {
+    const agyAccountFile = await readFile(join(homedir(), '.gemini', 'google_accounts.json'), 'utf8');
+    if (JSON.parse(agyAccountFile) && JSON.stringify(agyAccountFile).length > 2) authNotes.set('agy', 'logged in');
+  } catch {}
+  try {
+    const copilotConfig = await readFile(join(homedir(), '.copilot', 'config.json'), 'utf8');
+    if (JSON.parse(copilotConfig)) authNotes.set('copilot', 'logged in');
+  } catch {}
+  try {
+    await readFile(join(homedir(), '.copilot', 'session-store.db'));
+    authNotes.set('copilot', 'logged in');
+  } catch {}
+  try {
+    const opencodeAuth = await readFile(join(homedir(), '.local', 'share', 'opencode', 'auth.json'), 'utf8');
+    const parsed = JSON.parse(opencodeAuth) as Record<string, unknown>;
+    if (Object.keys(parsed).length > 0) authNotes.set('opencode', 'logged in');
+  } catch {}
+  authNotes.set('claude', 'Bedrock authenticated');
+
   return BACKEND_IDS.map((id) => {
     const quota = state[id] ?? placeholder(now);
     const disabled = id === 'claude' && !config.claudeEnabled;
@@ -136,12 +158,14 @@ export async function backendSnapshots(options?: { refresh?: boolean }): Promise
       : cooling ? 'cooling-down'
         : !info.present || missingHome ? 'unavailable'
           : 'available';
+    const accountNote = authNotes.get(id);
     const note = disabled ? 'Claude Pro not confirmed'
       : exhausted ? 'monthly limit reached · renewal time unknown'
       : cooling ? `cooling down until ${quota.coolingUntil}`
         : !info.present ? `${BACKEND_BINARIES[id]} not installed`
           : missingHome ? 'no CODEX_HOME configured (JCODE_CODEX_B_HOME)'
-            : quota.source === 'placeholder' ? 'quota unknown'
+            : quota.source === 'placeholder' && accountNote ? `${accountNote} · quota unknown`
+              : quota.source === 'placeholder' ? 'quota unknown'
               : quota.source === 'manual' ? 'MANUAL entry'
                 : undefined;
     return { id, model: models[id], status, quota, cliPresent: info.present, cliVersion: info.version, note };

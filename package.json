@@ -43,6 +43,7 @@
     "start": "node dist/index.js",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node scripts/run-tests.mjs",
+    "update:local": "npm run build && npm install -g --force --no-fund --no-audit .",
     "prepublishOnly": "npm run build"
   },
   "engines": {

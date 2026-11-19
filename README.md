@@ -72,6 +72,12 @@ npm run build
 npm link
 ```
 
+After pulling source changes, rebuild and refresh the local global binary:
+
+```sh
+npm run update:local
+```
+
 Remove the local global link with:
 
 ```sh

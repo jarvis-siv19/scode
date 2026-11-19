@@ -18,7 +18,7 @@ function stateLabel(backend: BackendSnapshot): string {
   if (backend.quota.remainingFraction === 0) return 'limit reached';
   if (backend.status === 'cooling-down') return `cool ${resetLabel(backend.quota.coolingUntil ?? null)}`.trim();
   if (backend.status === 'unavailable') return backend.note?.includes('CODEX_HOME') ? 'no home' : 'missing';
-  return backend.quota.remainingFraction === null ? 'unknown' : '';
+  return backend.quota.remainingFraction === null ? 'quota unknown' : '';
 }
 
 export function BackendsPane({ backends, theme, wide = false, selectedBackend }: {
