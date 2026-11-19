@@ -86,7 +86,13 @@ export function App() {
     setMessage(`${resolved}/${snapshots.length} limit states resolved`);
   };
 
-  useEffect(() => { void refresh(true); }, []);
+  const refreshSafely = (withProbes: boolean) => {
+    void refresh(withProbes).catch((error: unknown) => {
+      setMessage(`Refresh failed: ${error instanceof Error ? error.message : String(error)}`);
+    });
+  };
+
+  useEffect(() => { refreshSafely(true); }, []);
   useEffect(() => {
     if (!process.stdin.isTTY || !process.stdout.isTTY) return;
     process.stdout.write('\u001b[?1000h\u001b[?1006h');
@@ -142,7 +148,7 @@ export function App() {
         },
       }).then((result) => {
         tickingRef.current = false;
-        if (result.fired.length > 0) void refresh(false);
+        if (result.fired.length > 0) refreshSafely(false);
       }).catch((error: unknown) => {
         tickingRef.current = false;
         setMessage(error instanceof Error ? error.message : String(error));
@@ -243,7 +249,7 @@ export function App() {
       else setOverrideIndex((current) => (current + delta + OVERRIDE_OPTIONS.length) % OVERRIDE_OPTIONS.length);
     }
     if (input === 'q' && task.length === 0) exit();
-    if (input === 'r' && task.length === 0) void refresh(true);
+    if (input === 'r' && task.length === 0) refreshSafely(true);
     if (input === 'm' && task.length === 0) setMode('manual');
     if (input === 't' && task.length === 0) setMode('tokens');
     if (input === 'x' && task.length === 0) {
@@ -272,7 +278,7 @@ export function App() {
     if (input === 'f' && task.length === 0 && focus === 'backends' && override === 'opencode') {
       void setOpenCodeModel('free').then(() => {
         setMessage('OpenCode now uses the free model: opencode/big-pickle.');
-        void refresh(false);
+        refreshSafely(false);
       }).catch((error: unknown) => setMessage(error instanceof Error ? error.message : String(error)));
     }
   }, { isActive: mode !== 'manual' });
@@ -344,7 +350,7 @@ export function App() {
         : result.errorClass === 'cancelled'
           ? `Job stopped on ${result.backend}.`
           : `Job failed on ${result.backend}: ${result.errorClass ?? 'unknown'} (exit ${result.exitCode ?? 'unknown'}).`);
-      void refresh(false);
+      refreshSafely(false);
     } catch (error) {
       setJobs((current) => current.map((job) => job.id === id ? { ...job, state: 'failed', finishedAt: Date.now() } : job));
       setMessage(error instanceof Error ? error.message : String(error));
@@ -357,7 +363,7 @@ export function App() {
     await setManualQuota(backend, remainingFraction, resetsAt);
     setMode('task');
     setMessage(`Manual quota saved for ${backend}: ${Math.round(remainingFraction * 100)}% remaining.`);
-    void refresh(false);
+    refreshSafely(false);
   };
 
   const saveBackendEdit = async (backend: BackendSnapshot, edit: BackendEdit) => {
